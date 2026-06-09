@@ -64,7 +64,7 @@ Clone the repository:
 ```bash
 git clone <repo-url>
 cd MiniPyPy
-```
-
 cmake -B build
 cmake --build build --config Release
+
+```
