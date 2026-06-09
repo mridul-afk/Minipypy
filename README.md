@@ -50,21 +50,14 @@ print(c.cpu())
 
 - TensorFold compression engine
 
-## Building from Source
+## Installation
 
-Requirements:
+MiniPyPy is currently in early development.
 
-- Python 3.11
-- CUDA Toolkit
-- CMake
-- Visual Studio Build Tools
-
-Clone the repository:
+### Install from source
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/YOUR_USERNAME/MiniPyPy.git
 cd MiniPyPy
-cmake -B build
-cmake --build build --config Release
-
+pip install .
 ```
