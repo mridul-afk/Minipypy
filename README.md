@@ -57,7 +57,7 @@ MiniPyPy is currently in early development.
 ### Install from source
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/MiniPyPy.git
+git clone https://github.com/mridul-afk/MiniPyPy.git
 cd MiniPyPy
 pip install .
 ```
