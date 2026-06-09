@@ -1,14 +1,25 @@
+## Matmul Test
+
+
 import minipypy as mini
 
-a = mini.Tensor([1.0, 2.0, 3.0, 4.0])
-b = mini.Tensor([10.0, 20.0, 30.0, 40.0])
+a = mini.Tensor(
+    [1, 2,
+     3, 4],
+    [2, 2]
+)
 
-c = a + b
-d = a * b
-e = b - a
-f = b / a
+b = mini.Tensor(
+    [5, 6,
+     7, 8,
+     9, 10],
+    [2, 3]
+)
 
-print(c)
-print(d)
-print(e)
-print(f.cpu())
+c = a.matmul(b)
+
+d = a @ b
+
+print(d.cpu())
+
+print(c.cpu())
