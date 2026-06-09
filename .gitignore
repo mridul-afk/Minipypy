@@ -1,0 +1,16 @@
+build/
+venv/
+
+__pycache__/
+*.pyc
+
+*.pyd
+*.dll
+*.so
+*.o
+*.obj
+*.lib
+*.exp
+
+.vscode/
+.idea/
