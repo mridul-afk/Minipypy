@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "minipypy"
+version = "0.1.0"
+description = "A PyTorch-inspired tensor framework built from scratch using C++, CUDA, and pybind11."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [
+  { name = "Vansh Bajpai" }
+]
+keywords = ["cuda", "c-plus-plus", "python", "tensor", "deep-learning", "pybind11"]
+
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: C++",
+  "Operating System :: Microsoft :: Windows",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence"
+]
+
+[tool.setuptools]
+packages = ["minipypy"]
+
+[tool.setuptools.package-data]
+minipypy = ["*.pyd"]
