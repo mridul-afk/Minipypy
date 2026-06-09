@@ -25,22 +25,6 @@ c = a + b
 print(c.cpu())
 ```
 
-## Building from Source
-
-Requirements:
-
-- Python 3.11
-- CUDA Toolkit
-- CMake
-- Visual Studio Build Tools
-
-Clone the repository:
-
-```bash
-git clone <repo-url>
-cd MiniPyPy
-```
-
 ## Roadmap
 
 ### v0.1
@@ -65,3 +49,22 @@ cd MiniPyPy
 ### v0.5
 
 - TensorFold compression engine
+
+## Building from Source
+
+Requirements:
+
+- Python 3.11
+- CUDA Toolkit
+- CMake
+- Visual Studio Build Tools
+
+Clone the repository:
+
+```bash
+git clone <repo-url>
+cd MiniPyPy
+```
+
+cmake -B build
+cmake --build build --config Release
