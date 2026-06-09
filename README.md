@@ -23,7 +23,7 @@ b = mini.Tensor([10, 20, 30])
 c = a + b
 
 print(c.cpu())
-
+```
 
 ## Building from Source
 
