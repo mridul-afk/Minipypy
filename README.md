@@ -23,24 +23,29 @@ b = mini.Tensor([10, 20, 30])
 c = a + b
 
 print(c.cpu())
-
+```
 
 ## Roadmap
 
 ### v0.1
+
 - Tensor class
 - CUDA backend
 - Python bindings
 
 ### v0.2
+
 - Matrix multiplication
 - Broadcasting
 
 ### v0.3
+
 - Autograd engine
 
 ### v0.4
+
 - Neural network layers
 
 ### v0.5
+
 - TensorFold compression engine
