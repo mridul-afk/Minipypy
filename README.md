@@ -58,6 +58,6 @@ MiniPyPy is currently in early development.
 
 ```bash
 git clone https://github.com/mridul-afk/Minipypy.git
-cd MiniPyPy
+cd Minipypy
 pip install .
 ```
