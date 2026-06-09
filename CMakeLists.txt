@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.18 FATAL_ERROR)
 
-project(minipypy LANGUAGES CXX CUDA)
+project(_C LANGUAGES CXX CUDA)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -31,17 +31,17 @@ set_target_properties(minitorch_cuda_engine PROPERTIES
 )
 
 # 4. Create the Python C++ Extension Module
-pybind11_add_module(minipypy
+pybind11_add_module(_C
   src/bindings.cpp
   src/tensor.cpp
 )
 
-target_include_directories(minipypy PRIVATE
+target_include_directories(_C PRIVATE
   ${CMAKE_SOURCE_DIR}/src
 )
 
 # 5. Link everything together
-target_link_libraries(minipypy PRIVATE
+target_link_libraries(_C PRIVATE
   minitorch_cuda_engine
   CUDA::cudart
 )
@@ -53,10 +53,13 @@ target_compile_options(minitorch_cuda_engine PRIVATE
   -Xcompiler /wd4819
 )
 
-target_compile_options(minipypy PRIVATE
+target_compile_options(_C PRIVATE
   /O2
   /W3
 )
 
 # Tells CMake where to send the final file when you run the install command
-install(TARGETS minipypy DESTINATION "${CMAKE_SOURCE_DIR}")
+install(TARGETS _C
+  LIBRARY DESTINATION "${CMAKE_SOURCE_DIR}/minipypy"
+  RUNTIME DESTINATION "${CMAKE_SOURCE_DIR}/minipypy"
+)
