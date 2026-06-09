@@ -23,6 +23,22 @@ b = mini.Tensor([10, 20, 30])
 c = a + b
 
 print(c.cpu())
+
+
+## Building from Source
+
+Requirements:
+
+- Python 3.11
+- CUDA Toolkit
+- CMake
+- Visual Studio Build Tools
+
+Clone the repository:
+
+```bash
+git clone <repo-url>
+cd MiniPyPy
 ```
 
 ## Roadmap
