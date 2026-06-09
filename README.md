@@ -1,31 +1,46 @@
 # MiniPyPy
 
-A minimal PyTorch-inspired tensor framework built from scratch using:
+MiniPyPy is a PyTorch-inspired tensor framework built from scratch using C++, CUDA, and pybind11.
 
-- C++
-- CUDA
-- PyBind11
+The goal of this project is to understand and implement the core components of modern deep learning frameworks from first principles.
 
 ## Current Features
 
 - Custom Tensor class
-- GPU memory management
-- CUDA accelerated tensor operations
-- Python bindings
-- Tensor addition
-- Tensor subtraction
-- Tensor multiplication
-- Tensor division
-- CPU ↔ GPU transfer
+- CUDA-accelerated tensor operations
+- Python bindings using pybind11
+- CPU ↔ GPU memory transfers
+- Element-wise tensor arithmetic
 
 ## Example
 
 ```python
 import minipypy as mini
 
-a = mini.Tensor([1,2,3])
-b = mini.Tensor([10,20,30])
+a = mini.Tensor([1, 2, 3])
+b = mini.Tensor([10, 20, 30])
 
 c = a + b
 
 print(c.cpu())
+
+
+## Roadmap
+
+### v0.1
+- Tensor class
+- CUDA backend
+- Python bindings
+
+### v0.2
+- Matrix multiplication
+- Broadcasting
+
+### v0.3
+- Autograd engine
+
+### v0.4
+- Neural network layers
+
+### v0.5
+- TensorFold compression engine
