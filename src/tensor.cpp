@@ -9,6 +9,7 @@ void launch_add(const float *a, const float *b, float *out, int size);
 void launch_mul(const float *a, const float *b, float *out, int size);
 void launch_sub(const float *a, const float *b, float *out, int size);
 void launch_div(const float *a, const float *b, float *out, int size);
+void launch_matmul(const float *a, const float *b, float *out, int M, int N, int K);
 
 Tensor::Tensor(int size)
 {
@@ -58,6 +59,37 @@ Tensor::Tensor(std::vector<int> shape)
   }
 
   cudaMalloc(&d_data, size * sizeof(float));
+}
+
+Tensor::Tensor(const std::vector<float> &host_data, std::vector<int> shape)
+{
+  this->shape = shape;
+  this->size = 1;
+  this->is_cuda = true;
+  this->d_data = nullptr;
+
+  for (int dim : shape)
+    this->size *= dim;
+
+  if (this->size != static_cast<int>(host_data.size()))
+    throw std::runtime_error("Data size does not match tensor shape");
+
+  this->stride.resize(shape.size());
+
+  int running_stride = 1;
+  for (int i = static_cast<int>(shape.size()) - 1; i >= 0; i--)
+  {
+    stride[i] = running_stride;
+    running_stride *= shape[i];
+  }
+
+  cudaMalloc(&d_data, size * sizeof(float));
+
+  cudaMemcpy(
+      d_data,
+      host_data.data(),
+      size * sizeof(float),
+      cudaMemcpyHostToDevice);
 }
 
 // Disable copy in tensor.h, enable move.
@@ -137,5 +169,26 @@ Tensor Tensor::operator/(const Tensor &other) const
 {
   Tensor out(size);
   launch_div(d_data, other.d_data, out.d_data, size);
+  return out;
+}
+
+Tensor Tensor::matmul(const Tensor &other) const
+{
+  if (shape.size() != 2 || other.shape.size() != 2)
+    throw std::runtime_error("matmul currently supports only 2D tensors");
+
+  int M = shape[0];
+  int K = shape[1];
+
+  int K_other = other.shape[0];
+  int N = other.shape[1];
+
+  if (K != K_other)
+    throw std::runtime_error("matmul shape mismatch");
+
+  Tensor out(std::vector<int>{M, N});
+
+  launch_matmul(d_data, other.d_data, out.d_data, M, N, K);
+
   return out;
 }

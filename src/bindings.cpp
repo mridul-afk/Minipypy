@@ -9,14 +9,17 @@ PYBIND11_MODULE(_C, m)
 {
     py::class_<Tensor>(m, "Tensor")
         .def(py::init<const std::vector<float> &>())
-
+        .def(py::init<const std::vector<float> &, std::vector<int>>())
         .def("cpu", &Tensor::cpu)
 
         .def("__add__", &Tensor::operator+)
         .def("__mul__", &Tensor::operator*)
         .def("__sub__", &Tensor::operator-)
         .def("__truediv__", &Tensor::operator/)
+        .def("matmul", &Tensor::matmul)
+        .def("__matmul__", &Tensor::matmul)
         .def("__repr__", [](const Tensor &t)
+
              {
     std::vector<float> data = t.cpu();
 

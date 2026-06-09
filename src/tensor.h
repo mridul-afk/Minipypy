@@ -16,6 +16,7 @@ public:
    Tensor(int size);
    Tensor(const std::vector<float> &host_data);
    Tensor(std::vector<int> shape);
+   Tensor(const std::vector<float> &host_data, std::vector<int> shape);
 
    // No copying because Tensor owns GPU memory
    Tensor(const Tensor &) = delete;
@@ -27,10 +28,12 @@ public:
 
    ~Tensor();
 
+   // OPERATOR OVERLOADING
    Tensor operator+(const Tensor &other) const;
    Tensor operator*(const Tensor &other) const;
    Tensor operator-(const Tensor &other) const;
    Tensor operator/(const Tensor &other) const;
+   Tensor matmul(const Tensor &other) const;
 
    std::vector<float> cpu() const;
 };

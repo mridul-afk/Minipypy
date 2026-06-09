@@ -28,6 +28,30 @@ __global__ void div_kernel(const float *a, const float *b, float *out, int size)
     out[idx] = a[idx] / b[idx];
 }
 
+__global__ void matmul_kernel(
+    const float *a,
+    const float *b,
+    float *out,
+    int M,
+    int N,
+    int K)
+{
+  int row = blockIdx.y * blockDim.y + threadIdx.y;
+  int col = blockIdx.x * blockDim.x + threadIdx.x;
+
+  if (row < M && col < N)
+  {
+    float sum = 0.0f;
+
+    for (int i = 0; i < K; i++)
+    {
+      sum += a[row * K + i] * b[i * N + col];
+    }
+
+    out[row * N + col] = sum;
+  }
+}
+
 void launch_add(const float *a, const float *b, float *out, int size)
 {
   add_kernel<<<(size + 255) / 256, 256>>>(a, b, out, size);
@@ -49,5 +73,15 @@ void launch_sub(const float *a, const float *b, float *out, int size)
 void launch_div(const float *a, const float *b, float *out, int size)
 {
   div_kernel<<<(size + 255) / 256, 256>>>(a, b, out, size);
+  cudaDeviceSynchronize();
+}
+
+void launch_matmul(const float *a, const float *b, float *out, int M, int N, int K)
+{
+  dim3 block(16, 16);
+  dim3 grid((N + block.x - 1) / block.x,
+            (M + block.y - 1) / block.y);
+
+  matmul_kernel<<<grid, block>>>(a, b, out, M, N, K);
   cudaDeviceSynchronize();
 }
