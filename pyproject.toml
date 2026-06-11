@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [
-  { name = "Vansh Bajpai" }
+  { name = "Mridul Bajpai" }
 ]
 keywords = ["cuda", "c-plus-plus", "python", "tensor", "deep-learning", "pybind11"]
 
