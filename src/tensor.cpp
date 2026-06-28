@@ -146,6 +146,8 @@ std::vector<float> Tensor::cpu() const
 
 Tensor Tensor::operator+(const Tensor &other) const
 {
+  if (shape != other.shape)
+    throw std::runtime_error("Addition requires tensors to be of same shape");
   Tensor out(size);
   launch_add(d_data, other.d_data, out.d_data, size);
   return out;
@@ -153,6 +155,8 @@ Tensor Tensor::operator+(const Tensor &other) const
 
 Tensor Tensor::operator*(const Tensor &other) const
 {
+  if (shape != other.shape)
+    throw std::runtime_error("Multiplication requires tensors to be of same shape");
   Tensor out(size);
   launch_mul(d_data, other.d_data, out.d_data, size);
   return out;
@@ -160,6 +164,8 @@ Tensor Tensor::operator*(const Tensor &other) const
 
 Tensor Tensor::operator-(const Tensor &other) const
 {
+  if (shape != other.shape)
+    throw std::runtime_error("Subtraction requires tensors to be of same shape");
   Tensor out(size);
   launch_sub(d_data, other.d_data, out.d_data, size);
   return out;
@@ -167,6 +173,8 @@ Tensor Tensor::operator-(const Tensor &other) const
 
 Tensor Tensor::operator/(const Tensor &other) const
 {
+  if (shape != other.shape)
+    throw std::runtime_error("Division requires tensors to be of same shape");
   Tensor out(size);
   launch_div(d_data, other.d_data, out.d_data, size);
   return out;
