@@ -12,12 +12,13 @@ set(Python_FIND_VIRTUALENV FIRST)
 find_package(Python 3.11 REQUIRED COMPONENTS Interpreter Development.Module)
 find_package(CUDAToolkit REQUIRED)
 
-# 2. Locate Pybind11 inside your local .venv
+# 2. Locate pybind11 from the active Python environment
 execute_process(
   COMMAND "${Python_EXECUTABLE}" -c "import pybind11; print(pybind11.get_cmake_dir())"
   OUTPUT_VARIABLE PYBIND11_CMAKE_DIR
   OUTPUT_STRIP_TRAILING_WHITESPACE
 )
+
 list(APPEND CMAKE_PREFIX_PATH "${PYBIND11_CMAKE_DIR}")
 find_package(pybind11 REQUIRED)
 
@@ -26,8 +27,13 @@ add_library(minitorch_cuda_engine STATIC
   src/tensor.cu
 )
 
+# Support common NVIDIA GPU architectures:
+# 75 = Turing
+# 80 = Ampere data center
+# 86 = Ampere consumer GPUs, e.g. RTX 30 series
+# 89 = Ada GPUs, e.g. RTX 40 series
 set_target_properties(minitorch_cuda_engine PROPERTIES
-  CUDA_ARCHITECTURES "86;89"
+  CUDA_ARCHITECTURES "75;80;86;89"
 )
 
 # 4. Create the Python C++ Extension Module
@@ -48,18 +54,30 @@ target_link_libraries(_C PRIVATE
 )
 
 # 6. Apply target-specific compile flags cleanly
-target_compile_options(minitorch_cuda_engine PRIVATE
-  -O3
-  --use_fast_math
-  -Xcompiler /wd4819
-)
+if(MSVC)
+  target_compile_options(minitorch_cuda_engine PRIVATE
+    -O3
+    --use_fast_math
+    -Xcompiler /wd4819
+  )
 
-target_compile_options(_C PRIVATE
-  /O2
-  /W3
-)
+  target_compile_options(_C PRIVATE
+    /O2
+    /W3
+  )
+else()
+  target_compile_options(minitorch_cuda_engine PRIVATE
+    -O3
+    --use_fast_math
+  )
 
-# Tells CMake where to send the final file when you run the install command
+  target_compile_options(_C PRIVATE
+    -O3
+    -Wall
+  )
+endif()
+
+# 7. Install the compiled Python extension into the minipypy package
 install(TARGETS _C
   LIBRARY DESTINATION "${CMAKE_SOURCE_DIR}/minipypy"
   RUNTIME DESTINATION "${CMAKE_SOURCE_DIR}/minipypy"
