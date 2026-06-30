@@ -55,25 +55,21 @@ __global__ void matmul_kernel(
 void launch_add(const float *a, const float *b, float *out, int size)
 {
   add_kernel<<<(size + 255) / 256, 256>>>(a, b, out, size);
-  cudaDeviceSynchronize();
 }
 
 void launch_mul(const float *a, const float *b, float *out, int size)
 {
   mul_kernel<<<(size + 255) / 256, 256>>>(a, b, out, size);
-  cudaDeviceSynchronize();
 }
 
 void launch_sub(const float *a, const float *b, float *out, int size)
 {
   sub_kernel<<<(size + 255) / 256, 256>>>(a, b, out, size);
-  cudaDeviceSynchronize();
 }
 
 void launch_div(const float *a, const float *b, float *out, int size)
 {
   div_kernel<<<(size + 255) / 256, 256>>>(a, b, out, size);
-  cudaDeviceSynchronize();
 }
 
 void launch_matmul(const float *a, const float *b, float *out, int M, int N, int K)
@@ -83,5 +79,4 @@ void launch_matmul(const float *a, const float *b, float *out, int M, int N, int
             (M + block.y - 1) / block.y);
 
   matmul_kernel<<<grid, block>>>(a, b, out, M, N, K);
-  cudaDeviceSynchronize();
 }

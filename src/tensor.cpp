@@ -1,4 +1,5 @@
 #include "tensor.h"
+#include "memory_pool.h"
 
 #include <cuda_runtime.h>
 #include <stdexcept>
@@ -19,7 +20,8 @@ Tensor::Tensor(int size)
   this->is_cuda = true;
   this->d_data = nullptr;
 
-  cudaMalloc(&d_data, size * sizeof(float));
+  d_data = static_cast<float *>(
+      CudaMemoryPool::instance().allocate(size * sizeof(float)));
 }
 
 Tensor::Tensor(const std::vector<float> &host_data)
@@ -30,7 +32,8 @@ Tensor::Tensor(const std::vector<float> &host_data)
   this->is_cuda = true;
   this->d_data = nullptr;
 
-  cudaMalloc(&d_data, size * sizeof(float));
+  d_data = static_cast<float *>(
+      CudaMemoryPool::instance().allocate(size * sizeof(float)));
 
   cudaMemcpy(
       d_data,
@@ -58,7 +61,8 @@ Tensor::Tensor(std::vector<int> shape)
     running_stride *= shape[i];
   }
 
-  cudaMalloc(&d_data, size * sizeof(float));
+  d_data = static_cast<float *>(
+      CudaMemoryPool::instance().allocate(size * sizeof(float)));
 }
 
 Tensor::Tensor(const std::vector<float> &host_data, std::vector<int> shape)
@@ -83,7 +87,8 @@ Tensor::Tensor(const std::vector<float> &host_data, std::vector<int> shape)
     running_stride *= shape[i];
   }
 
-  cudaMalloc(&d_data, size * sizeof(float));
+  d_data = static_cast<float *>(
+      CudaMemoryPool::instance().allocate(size * sizeof(float)));
 
   cudaMemcpy(
       d_data,
@@ -110,7 +115,11 @@ Tensor &Tensor::operator=(Tensor &&other) noexcept
   if (this != &other)
   {
     if (this->d_data)
-      cudaFree(this->d_data);
+    {
+      CudaMemoryPool::instance().deallocate(
+          this->d_data,
+          this->size * sizeof(float));
+    }
 
     this->d_data = other.d_data;
     this->size = other.size;
@@ -128,7 +137,7 @@ Tensor &Tensor::operator=(Tensor &&other) noexcept
 Tensor::~Tensor()
 {
   if (d_data)
-    cudaFree(d_data);
+    CudaMemoryPool::instance().deallocate(d_data, size * sizeof(float));
 }
 
 std::vector<float> Tensor::cpu() const

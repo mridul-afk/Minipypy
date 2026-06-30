@@ -34,6 +34,7 @@ set_target_properties(minitorch_cuda_engine PROPERTIES
 pybind11_add_module(_C
   src/bindings.cpp
   src/tensor.cpp
+  src/memory_pool.cpp
 )
 
 target_include_directories(_C PRIVATE
