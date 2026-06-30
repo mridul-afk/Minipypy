@@ -1,25 +1,22 @@
-## Matmul Test
-
-
 import minipypy as mini
-
 a = mini.Tensor(
-    [1, 2,
-     3, 4],
-    [2, 2]
+    [1,2,
+     3,4],
+    [2,2]
 )
+
+print(a)
 
 b = mini.Tensor(
-    [5, 6,
-     7, 8,
-     9, 10],
-    [2, 3]
+    list(range(24)),
+    [2,3,4]
 )
 
-c = a.matmul(b)
+print(b)
 
-d = a @ b
+c = mini.Tensor(
+    list(range(48)),
+    [2,2,3,4]
+)
 
-print(d.cpu())
-
-print(c.cpu())
+print(c)

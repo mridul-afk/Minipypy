@@ -209,3 +209,44 @@ Tensor Tensor::matmul(const Tensor &other) const
 
   return out;
 }
+
+std::vector<int> Tensor::get_shape() const
+{
+  return shape;
+}
+
+int Tensor::ndim() const
+{
+  return static_cast<int>(shape.size());
+}
+
+int Tensor::numel() const
+{
+  return size;
+}
+
+std::vector<int> Tensor::get_stride() const
+{
+  return stride;
+}
+
+Tensor Tensor::reshape(std::vector<int> new_shape) const
+{
+  int new_size = 1;
+
+  for (int dim : new_shape)
+    new_size *= dim;
+
+  if (new_size != size)
+    throw std::runtime_error("reshape size mismatch");
+
+  Tensor out(new_shape);
+
+  cudaMemcpy(
+      out.d_data,
+      d_data,
+      size * sizeof(float),
+      cudaMemcpyDeviceToDevice);
+
+  return out;
+}

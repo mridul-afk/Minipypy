@@ -34,6 +34,11 @@ public:
    Tensor operator-(const Tensor &other) const;
    Tensor operator/(const Tensor &other) const;
    Tensor matmul(const Tensor &other) const;
+   Tensor reshape(std::vector<int> new_shape) const;
 
    std::vector<float> cpu() const;
+   std::vector<int> get_shape() const;
+   int ndim() const;
+   int numel() const;
+   std::vector<int> get_stride() const;
 };
