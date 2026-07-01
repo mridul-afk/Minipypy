@@ -12,6 +12,9 @@ void launch_sub(const float *a, const float *b, float *out, int size);
 void launch_div(const float *a, const float *b, float *out, int size);
 void launch_matmul(const float *a, const float *b, float *out, int M, int N, int K);
 void launch_transpose(const float *input, float *output, int rows, int cols);
+void launch_sum(const float *input, float *output, int size);
+void launch_divide_scalar(float *data, float scalar);
+void launch_max(const float *input, float *output, int size);
 
 Tensor::Tensor(int size)
 {
@@ -268,6 +271,37 @@ Tensor Tensor::transpose() const
   Tensor out(std::vector<int>{cols, rows});
 
   launch_transpose(d_data, out.d_data, rows, cols);
+
+  return out;
+}
+
+Tensor Tensor::sum() const
+{
+  Tensor out(std::vector<int>{1});
+
+  launch_sum(d_data, out.d_data, size);
+
+  return out;
+}
+
+Tensor Tensor::mean() const
+{
+  Tensor out = sum();
+
+  launch_divide_scalar(out.d_data,
+                       static_cast<float>(size));
+
+  return out;
+}
+
+Tensor Tensor::max() const
+{
+  Tensor out(std::vector<int>{1});
+
+  launch_max(
+      d_data,
+      out.d_data,
+      size);
 
   return out;
 }

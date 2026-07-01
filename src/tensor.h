@@ -33,14 +33,18 @@ public:
    Tensor operator*(const Tensor &other) const;
    Tensor operator-(const Tensor &other) const;
    Tensor operator/(const Tensor &other) const;
-   Tensor matmul(const Tensor &other) const;
-   Tensor reshape(std::vector<int> new_shape) const;
-   Tensor flatten() const;
-   Tensor transpose() const;
 
+   // TENSOR OPS
    std::vector<float> cpu() const;
    std::vector<int> get_shape() const;
    int ndim() const;
    int numel() const;
    std::vector<int> get_stride() const;
+   Tensor matmul(const Tensor &other) const;
+   Tensor reshape(std::vector<int> new_shape) const;
+   Tensor flatten() const;
+   Tensor transpose() const;
+   Tensor sum() const;
+   Tensor mean() const;
+   Tensor max() const;
 };
