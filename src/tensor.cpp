@@ -11,6 +11,7 @@ void launch_mul(const float *a, const float *b, float *out, int size);
 void launch_sub(const float *a, const float *b, float *out, int size);
 void launch_div(const float *a, const float *b, float *out, int size);
 void launch_matmul(const float *a, const float *b, float *out, int M, int N, int K);
+void launch_transpose(const float *input, float *output, int rows, int cols);
 
 Tensor::Tensor(int size)
 {
@@ -247,6 +248,26 @@ Tensor Tensor::reshape(std::vector<int> new_shape) const
       d_data,
       size * sizeof(float),
       cudaMemcpyDeviceToDevice);
+
+  return out;
+}
+
+Tensor Tensor::flatten() const
+{
+  return reshape(std::vector<int>{size});
+}
+
+Tensor Tensor::transpose() const
+{
+  if (shape.size() != 2)
+    throw std::runtime_error("transpose currently supports only 2D tensors");
+
+  int rows = shape[0];
+  int cols = shape[1];
+
+  Tensor out(std::vector<int>{cols, rows});
+
+  launch_transpose(d_data, out.d_data, rows, cols);
 
   return out;
 }

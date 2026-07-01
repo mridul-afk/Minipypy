@@ -35,6 +35,8 @@ public:
    Tensor operator/(const Tensor &other) const;
    Tensor matmul(const Tensor &other) const;
    Tensor reshape(std::vector<int> new_shape) const;
+   Tensor flatten() const;
+   Tensor transpose() const;
 
    std::vector<float> cpu() const;
    std::vector<int> get_shape() const;

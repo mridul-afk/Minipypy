@@ -1,4 +1,5 @@
 #include <cuda_runtime.h>
+#include <cstdio>
 
 __global__ void add_kernel(const float *a, const float *b, float *out, int size)
 {
@@ -52,6 +53,21 @@ __global__ void matmul_kernel(
   }
 }
 
+__global__ void transpose_kernel(
+    const float *input,
+    float *output,
+    int rows,
+    int cols)
+{
+  int row = blockIdx.y * blockDim.y + threadIdx.y;
+  int col = blockIdx.x * blockDim.x + threadIdx.x;
+
+  if (row < rows && col < cols)
+  {
+    output[col * rows + row] = input[row * cols + col];
+  }
+}
+
 void launch_add(const float *a, const float *b, float *out, int size)
 {
   add_kernel<<<(size + 255) / 256, 256>>>(a, b, out, size);
@@ -79,4 +95,19 @@ void launch_matmul(const float *a, const float *b, float *out, int M, int N, int
             (M + block.y - 1) / block.y);
 
   matmul_kernel<<<grid, block>>>(a, b, out, M, N, K);
+}
+
+void launch_transpose(const float *input, float *output, int rows, int cols)
+{
+  dim3 block(16, 16);
+  dim3 grid((cols + block.x - 1) / block.x,
+            (rows + block.y - 1) / block.y);
+
+  transpose_kernel<<<grid, block>>>(input, output, rows, cols);
+
+  cudaError_t err = cudaGetLastError();
+  if (err != cudaSuccess)
+  {
+    printf("transpose kernel launch error: %s\n", cudaGetErrorString(err));
+  }
 }

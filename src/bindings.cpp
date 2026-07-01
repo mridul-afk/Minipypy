@@ -169,6 +169,8 @@ PYBIND11_MODULE(_C, m)
         .def("matmul", &Tensor::matmul)
         .def("__matmul__", &Tensor::matmul)
         .def("reshape", &Tensor::reshape)
+        .def("flatten", &Tensor::flatten)
+        .def("transpose", &Tensor::transpose)
 
         .def("__repr__", [](const Tensor &t)
              {
