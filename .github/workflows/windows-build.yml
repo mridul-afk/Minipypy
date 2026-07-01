@@ -1,0 +1,39 @@
+name: Windows Build
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install Python build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pybind11 scikit-build-core wheel ninja
+
+      - name: Check CUDA
+        run: |
+          nvcc --version
+          where nvcc
+
+      - name: Build and install MiniPyPy
+        run: |
+          pip install . --config-settings=cmake.args="-G Ninja"
+
+      - name: Test import and tensor ops
+        run: |
+          python -c "import minipypy as mini; print(mini.Tensor([[1,2],[3,4]]) + mini.Tensor([10,20]))"
