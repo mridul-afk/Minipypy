@@ -1,22 +1,8 @@
 import minipypy as mini
-a = mini.Tensor(
-    [1,2,
-     3,4],
-    [2,2]
-)
 
-print(a)
+print(mini.Tensor([[1, 2], [3, 4]]))
 
-b = mini.Tensor(
-    list(range(24)),
-    [2,3,4]
-)
-
-print(b)
-
-c = mini.Tensor(
-    list(range(48)),
-    [2,2,3,4]
-)
-
-print(c)
+try:
+    bad = mini.Tensor([[1, 2], [3]])
+except Exception as e:
+    print(e)
