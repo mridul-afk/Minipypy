@@ -31,30 +31,48 @@ __global__ void div_kernel(const float *a, const float *b, float *out, int size)
     out[idx] = a[idx] / b[idx];
 }
 
+constexpr int TILE_SIZE = 16;
+
 __global__ void matmul_kernel(
-    const float *a,
-    const float *b,
-    float *out,
+    const float *A,
+    const float *B,
+    float *C,
     int M,
     int N,
     int K)
 {
-  int row = blockIdx.y * blockDim.y + threadIdx.y;
-  int col = blockIdx.x * blockDim.x + threadIdx.x;
+  int row = blockIdx.y * TILE_SIZE + threadIdx.y;
+  int col = blockIdx.x * TILE_SIZE + threadIdx.x;
+
+  __shared__ float sh_A[TILE_SIZE][TILE_SIZE];
+  __shared__ float sh_B[TILE_SIZE][TILE_SIZE];
+
+  float sum = 0.0f;
+
+  int num_tiles = (K + TILE_SIZE - 1) / TILE_SIZE;
+
+  for (int tile = 0; tile < num_tiles; tile++)
+  {
+    int a_col = tile * TILE_SIZE + threadIdx.x;
+    int b_row = tile * TILE_SIZE + threadIdx.y;
+
+    sh_A[threadIdx.y][threadIdx.x] =
+        (row < M && a_col < K) ? A[row * K + a_col] : 0.0f;
+
+    sh_B[threadIdx.y][threadIdx.x] =
+        (b_row < K && col < N) ? B[b_row * N + col] : 0.0f;
+
+    __syncthreads();
+
+    for (int i = 0; i < TILE_SIZE; i++)
+      sum += sh_A[threadIdx.y][i] * sh_B[i][threadIdx.x];
+
+    __syncthreads();
+  }
 
   if (row < M && col < N)
-  {
-    float sum = 0.0f;
-
-    for (int i = 0; i < K; i++)
-    {
-      sum += a[row * K + i] * b[i * N + col];
-    }
-
-    out[row * N + col] = sum;
-  }
+    C[row * N + col] = sum;
 }
-
 __global__ void transpose_kernel(
     const float *input,
     float *output,
