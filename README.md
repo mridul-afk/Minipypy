@@ -25,7 +25,7 @@ The goal of this project is to understand how modern deep learning frameworks su
 * Element-wise subtraction
 * Element-wise multiplication
 * Element-wise division
-* Broadcasting (NumPy/PyTorch style)
+* NumPy/PyTorch-style broadcasting
 * 2D Matrix Multiplication
 * Reshape
 * Flatten
@@ -49,7 +49,7 @@ The goal of this project is to understand how modern deep learning frameworks su
 
 * Python bindings using pybind11
 * Natural nested-list tensor construction
-* Readable N-dimensional tensor printing
+* Readable N-dimensional tensor representation
 
 ---
 
@@ -93,17 +93,50 @@ print(a.transpose())
 * ✅ Shape & stride management
 * ✅ Broadcasting
 * ✅ Element-wise tensor operations
-* ✅ 2D matrix multiplication
+* ✅ 2D Matrix Multiplication
 * ✅ Reshape
 * ✅ Flatten
-* ✅ 2D transpose
-* ✅ Tensor reductions
+* ✅ 2D Transpose
+* ✅ Sum / Mean / Max reductions
 * ✅ CUDA memory pooling
 * ✅ Automatic GPU memory reuse
 * ✅ Shape validation
 * ✅ Ragged tensor validation
 * ✅ Move semantics
 * ✅ Readable tensor representation
+
+---
+
+# Installation
+
+## Install from Source
+
+```bash
+git clone https://github.com/mridul-afk/Minipypy.git
+cd Minipypy
+
+python -m venv venv
+```
+
+Windows
+
+```bash
+venv\Scripts\activate
+```
+
+Linux / macOS
+
+```bash
+source venv/bin/activate
+```
+
+Install the package
+
+```bash
+pip install .
+```
+
+MiniPyPy now supports modern Python packaging through **scikit-build-core**, automatically building the CUDA extension during installation.
 
 ---
 
@@ -161,63 +194,21 @@ print(a.transpose())
 
 ---
 
-# Building from Source
-
-## Clone the repository
-
-```bash
-git clone https://github.com/mridul-afk/Minipypy.git
-cd Minipypy
-```
-
-## Create a virtual environment
-
-```bash
-python -m venv venv
-```
-
-Windows
-
-```bash
-venv\Scripts\activate
-```
-
-Linux/macOS
-
-```bash
-source venv/bin/activate
-```
-
-## Install dependencies
-
-```bash
-pip install -e .
-```
-
-## Build the CUDA backend
-
-```bash
-cmake -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build --config Release
-cmake --install build --config Release
-```
-
----
-
 # Tech Stack
 
 * C++17
 * CUDA
 * pybind11
 * CMake
+* scikit-build-core
 * Python
 
 ---
 
 # Vision
 
-MiniPyPy is an educational deep learning framework designed to explore how modern tensor libraries work internally.
+MiniPyPy is an educational deep learning framework built to explore how modern tensor libraries work internally.
 
-Rather than wrapping existing frameworks, MiniPyPy implements tensor operations, CUDA kernels, memory management, broadcasting, reductions, and eventually automatic differentiation completely from scratch.
+Rather than wrapping existing frameworks, MiniPyPy implements tensors, CUDA kernels, memory management, broadcasting, reductions, and eventually automatic differentiation completely from scratch.
 
 The long-term goal is to serve as the computational backend for **TensorFold**, a tensor-decomposition-based deep learning framework focused on efficient model compression and deployment.

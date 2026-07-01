@@ -9,7 +9,7 @@ set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 
 # 1. Locate System & Package Dependencies
 set(Python_FIND_VIRTUALENV FIRST)
-find_package(Python 3.11 REQUIRED COMPONENTS Interpreter Development.Module)
+find_package(Python REQUIRED COMPONENTS Interpreter Development.Module)
 find_package(CUDAToolkit REQUIRED)
 
 # 2. Locate pybind11 from the active Python environment
@@ -79,6 +79,6 @@ endif()
 
 # 7. Install the compiled Python extension into the minipypy package
 install(TARGETS _C
-  LIBRARY DESTINATION "${CMAKE_SOURCE_DIR}/minipypy"
-  RUNTIME DESTINATION "${CMAKE_SOURCE_DIR}/minipypy"
+  LIBRARY DESTINATION minipypy
+  RUNTIME DESTINATION minipypy
 )
