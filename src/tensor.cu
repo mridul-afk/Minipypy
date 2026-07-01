@@ -138,6 +138,152 @@ __global__ void max_kernel(
     atomicMax((int *)output, __float_as_int(shared[0]));
 }
 
+__global__ void add_broadcast_kernel(
+    const float *a,
+    const float *b,
+    float *out,
+    const int *a_shape,
+    const int *a_stride,
+    const int *b_shape,
+    const int *b_stride,
+    const int *out_shape,
+    int a_ndim,
+    int b_ndim,
+    int out_ndim,
+    int out_size)
+{
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+  if (idx >= out_size)
+    return;
+
+  int temp = idx;
+  int a_offset = 0;
+  int b_offset = 0;
+
+  for (int dim = out_ndim - 1; dim >= 0; dim--)
+  {
+    int coord = temp % out_shape[dim];
+    temp /= out_shape[dim];
+
+    int a_dim = dim - (out_ndim - a_ndim);
+    int b_dim = dim - (out_ndim - b_ndim);
+
+    if (a_dim >= 0)
+    {
+      int a_coord = (a_shape[a_dim] == 1) ? 0 : coord;
+      a_offset += a_coord * a_stride[a_dim];
+    }
+
+    if (b_dim >= 0)
+    {
+      int b_coord = (b_shape[b_dim] == 1) ? 0 : coord;
+      b_offset += b_coord * b_stride[b_dim];
+    }
+  }
+
+  out[idx] = a[a_offset] + b[b_offset];
+}
+
+__global__ void sub_broadcast_kernel(
+    const float *a, const float *b, float *out,
+    const int *a_shape, const int *a_stride,
+    const int *b_shape, const int *b_stride,
+    const int *out_shape,
+    int a_ndim, int b_ndim, int out_ndim, int out_size)
+{
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  if (idx >= out_size)
+    return;
+
+  int temp = idx;
+  int a_offset = 0;
+  int b_offset = 0;
+
+  for (int dim = out_ndim - 1; dim >= 0; dim--)
+  {
+    int coord = temp % out_shape[dim];
+    temp /= out_shape[dim];
+
+    int a_dim = dim - (out_ndim - a_ndim);
+    int b_dim = dim - (out_ndim - b_ndim);
+
+    if (a_dim >= 0)
+      a_offset += ((a_shape[a_dim] == 1) ? 0 : coord) * a_stride[a_dim];
+
+    if (b_dim >= 0)
+      b_offset += ((b_shape[b_dim] == 1) ? 0 : coord) * b_stride[b_dim];
+  }
+
+  out[idx] = a[a_offset] - b[b_offset];
+}
+
+__global__ void mul_broadcast_kernel(
+    const float *a, const float *b, float *out,
+    const int *a_shape, const int *a_stride,
+    const int *b_shape, const int *b_stride,
+    const int *out_shape,
+    int a_ndim, int b_ndim, int out_ndim, int out_size)
+{
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  if (idx >= out_size)
+    return;
+
+  int temp = idx;
+  int a_offset = 0;
+  int b_offset = 0;
+
+  for (int dim = out_ndim - 1; dim >= 0; dim--)
+  {
+    int coord = temp % out_shape[dim];
+    temp /= out_shape[dim];
+
+    int a_dim = dim - (out_ndim - a_ndim);
+    int b_dim = dim - (out_ndim - b_ndim);
+
+    if (a_dim >= 0)
+      a_offset += ((a_shape[a_dim] == 1) ? 0 : coord) * a_stride[a_dim];
+
+    if (b_dim >= 0)
+      b_offset += ((b_shape[b_dim] == 1) ? 0 : coord) * b_stride[b_dim];
+  }
+
+  out[idx] = a[a_offset] * b[b_offset];
+}
+
+__global__ void div_broadcast_kernel(
+    const float *a, const float *b, float *out,
+    const int *a_shape, const int *a_stride,
+    const int *b_shape, const int *b_stride,
+    const int *out_shape,
+    int a_ndim, int b_ndim, int out_ndim, int out_size)
+{
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  if (idx >= out_size)
+    return;
+
+  int temp = idx;
+  int a_offset = 0;
+  int b_offset = 0;
+
+  for (int dim = out_ndim - 1; dim >= 0; dim--)
+  {
+    int coord = temp % out_shape[dim];
+    temp /= out_shape[dim];
+
+    int a_dim = dim - (out_ndim - a_ndim);
+    int b_dim = dim - (out_ndim - b_ndim);
+
+    if (a_dim >= 0)
+      a_offset += ((a_shape[a_dim] == 1) ? 0 : coord) * a_stride[a_dim];
+
+    if (b_dim >= 0)
+      b_offset += ((b_shape[b_dim] == 1) ? 0 : coord) * b_stride[b_dim];
+  }
+
+  out[idx] = a[a_offset] / b[b_offset];
+}
+
 void launch_add(const float *a, const float *b, float *out, int size)
 {
   add_kernel<<<(size + 255) / 256, 256>>>(a, b, out, size);
@@ -222,4 +368,90 @@ void launch_max(const float *input, float *output, int size)
       &max_val,
       sizeof(float),
       cudaMemcpyHostToDevice);
+}
+
+void launch_add_broadcast(
+    const float *a,
+    const float *b,
+    float *out,
+    const int *a_shape,
+    const int *a_stride,
+    const int *b_shape,
+    const int *b_stride,
+    const int *out_shape,
+    int a_ndim,
+    int b_ndim,
+    int out_ndim,
+    int out_size)
+{
+  int threads = 256;
+  int blocks = (out_size + threads - 1) / threads;
+
+  add_broadcast_kernel<<<blocks, threads>>>(
+      a,
+      b,
+      out,
+      a_shape,
+      a_stride,
+      b_shape,
+      b_stride,
+      out_shape,
+      a_ndim,
+      b_ndim,
+      out_ndim,
+      out_size);
+}
+
+void launch_sub_broadcast(
+    const float *a, const float *b, float *out,
+    const int *a_shape, const int *a_stride,
+    const int *b_shape, const int *b_stride,
+    const int *out_shape,
+    int a_ndim, int b_ndim, int out_ndim, int out_size)
+{
+  int threads = 256;
+  int blocks = (out_size + threads - 1) / threads;
+
+  sub_broadcast_kernel<<<blocks, threads>>>(
+      a, b, out,
+      a_shape, a_stride,
+      b_shape, b_stride,
+      out_shape,
+      a_ndim, b_ndim, out_ndim, out_size);
+}
+
+void launch_mul_broadcast(
+    const float *a, const float *b, float *out,
+    const int *a_shape, const int *a_stride,
+    const int *b_shape, const int *b_stride,
+    const int *out_shape,
+    int a_ndim, int b_ndim, int out_ndim, int out_size)
+{
+  int threads = 256;
+  int blocks = (out_size + threads - 1) / threads;
+
+  mul_broadcast_kernel<<<blocks, threads>>>(
+      a, b, out,
+      a_shape, a_stride,
+      b_shape, b_stride,
+      out_shape,
+      a_ndim, b_ndim, out_ndim, out_size);
+}
+
+void launch_div_broadcast(
+    const float *a, const float *b, float *out,
+    const int *a_shape, const int *a_stride,
+    const int *b_shape, const int *b_stride,
+    const int *out_shape,
+    int a_ndim, int b_ndim, int out_ndim, int out_size)
+{
+  int threads = 256;
+  int blocks = (out_size + threads - 1) / threads;
+
+  div_broadcast_kernel<<<blocks, threads>>>(
+      a, b, out,
+      a_shape, a_stride,
+      b_shape, b_stride,
+      out_shape,
+      a_ndim, b_ndim, out_ndim, out_size);
 }

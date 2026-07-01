@@ -4,6 +4,7 @@
 #include <cuda_runtime.h>
 #include <stdexcept>
 #include <utility>
+#include <algorithm>
 
 // CUDA launchers from tensor.cu
 void launch_add(const float *a, const float *b, float *out, int size);
@@ -15,6 +16,121 @@ void launch_transpose(const float *input, float *output, int rows, int cols);
 void launch_sum(const float *input, float *output, int size);
 void launch_divide_scalar(float *data, float scalar);
 void launch_max(const float *input, float *output, int size);
+void launch_add_broadcast(
+    const float *a,
+    const float *b,
+    float *out,
+    const int *a_shape,
+    const int *a_stride,
+    const int *b_shape,
+    const int *b_stride,
+    const int *out_shape,
+    int a_ndim,
+    int b_ndim,
+    int out_ndim,
+    int out_size);
+
+void launch_sub_broadcast(
+    const float *a,
+    const float *b,
+    float *out,
+    const int *a_shape,
+    const int *a_stride,
+    const int *b_shape,
+    const int *b_stride,
+    const int *out_shape,
+    int a_ndim,
+    int b_ndim,
+    int out_ndim,
+    int out_size);
+
+void launch_mul_broadcast(
+    const float *a,
+    const float *b,
+    float *out,
+    const int *a_shape,
+    const int *a_stride,
+    const int *b_shape,
+    const int *b_stride,
+    const int *out_shape,
+    int a_ndim,
+    int b_ndim,
+    int out_ndim,
+    int out_size);
+
+void launch_div_broadcast(
+    const float *a,
+    const float *b,
+    float *out,
+    const int *a_shape,
+    const int *a_stride,
+    const int *b_shape,
+    const int *b_stride,
+    const int *out_shape,
+    int a_ndim,
+    int b_ndim,
+    int out_ndim,
+    int out_size);
+
+std::vector<int> broadcast_shape(
+    const std::vector<int> &a,
+    const std::vector<int> &b)
+{
+  int ndim_a = static_cast<int>(a.size());
+  int ndim_b = static_cast<int>(b.size());
+
+  int ndim_out = std::max(ndim_a, ndim_b);
+
+  std::vector<int> out_shape(ndim_out);
+
+  for (int i = 0; i < ndim_out; i++)
+  {
+    int dim_a = 1;
+    int dim_b = 1;
+
+    int index_a = ndim_a - 1 - i;
+    int index_b = ndim_b - 1 - i;
+
+    if (index_a >= 0)
+      dim_a = a[index_a];
+
+    if (index_b >= 0)
+      dim_b = b[index_b];
+
+    if (dim_a != dim_b && dim_a != 1 && dim_b != 1)
+      throw std::runtime_error("Shapes are not broadcastable");
+
+    out_shape[ndim_out - 1 - i] = std::max(dim_a, dim_b);
+  }
+
+  return out_shape;
+}
+
+int *copy_int_vector_to_device(const std::vector<int> &host)
+{
+  size_t bytes = host.size() * sizeof(int);
+
+  int *d_ptr = static_cast<int *>(
+      CudaMemoryPool::instance().allocate(bytes));
+
+  cudaMemcpy(
+      d_ptr,
+      host.data(),
+      bytes,
+      cudaMemcpyHostToDevice);
+
+  return d_ptr;
+}
+
+void free_device_int_vector(int *ptr, const std::vector<int> &host)
+{
+  if (!ptr)
+    return;
+
+  size_t bytes = host.size() * sizeof(int);
+
+  CudaMemoryPool::instance().deallocate(ptr, bytes);
+}
 
 Tensor::Tensor(int size)
 {
@@ -159,37 +275,169 @@ std::vector<float> Tensor::cpu() const
 
 Tensor Tensor::operator+(const Tensor &other) const
 {
-  if (shape != other.shape)
-    throw std::runtime_error("Addition requires tensors to be of same shape");
-  Tensor out(shape);
-  launch_add(d_data, other.d_data, out.d_data, size);
-  return out;
-}
+  std::vector<int> out_shape = broadcast_shape(shape, other.shape);
 
-Tensor Tensor::operator*(const Tensor &other) const
-{
-  if (shape != other.shape)
-    throw std::runtime_error("Multiplication requires tensors to be of same shape");
-  Tensor out(shape);
-  launch_mul(d_data, other.d_data, out.d_data, size);
+  Tensor out(out_shape);
+
+  // Fast path: same shape
+  if (shape == other.shape)
+  {
+    launch_add(d_data, other.d_data, out.d_data, size);
+    return out;
+  }
+
+  int *d_a_shape = copy_int_vector_to_device(shape);
+  int *d_a_stride = copy_int_vector_to_device(stride);
+  int *d_b_shape = copy_int_vector_to_device(other.shape);
+  int *d_b_stride = copy_int_vector_to_device(other.stride);
+  int *d_out_shape = copy_int_vector_to_device(out_shape);
+
+  launch_add_broadcast(
+      d_data,
+      other.d_data,
+      out.d_data,
+      d_a_shape,
+      d_a_stride,
+      d_b_shape,
+      d_b_stride,
+      d_out_shape,
+      static_cast<int>(shape.size()),
+      static_cast<int>(other.shape.size()),
+      static_cast<int>(out_shape.size()),
+      out.size);
+
+  free_device_int_vector(d_a_shape, shape);
+  free_device_int_vector(d_a_stride, stride);
+  free_device_int_vector(d_b_shape, other.shape);
+  free_device_int_vector(d_b_stride, other.stride);
+  free_device_int_vector(d_out_shape, out_shape);
+
   return out;
 }
 
 Tensor Tensor::operator-(const Tensor &other) const
 {
-  if (shape != other.shape)
-    throw std::runtime_error("Subtraction requires tensors to be of same shape");
-  Tensor out(shape);
-  launch_sub(d_data, other.d_data, out.d_data, size);
+  std::vector<int> out_shape = broadcast_shape(shape, other.shape);
+
+  Tensor out(out_shape);
+
+  // Fast path: same shape
+  if (shape == other.shape)
+  {
+    launch_sub(d_data, other.d_data, out.d_data, size);
+    return out;
+  }
+
+  int *d_a_shape = copy_int_vector_to_device(shape);
+  int *d_a_stride = copy_int_vector_to_device(stride);
+  int *d_b_shape = copy_int_vector_to_device(other.shape);
+  int *d_b_stride = copy_int_vector_to_device(other.stride);
+  int *d_out_shape = copy_int_vector_to_device(out_shape);
+
+  launch_sub_broadcast(
+      d_data,
+      other.d_data,
+      out.d_data,
+      d_a_shape,
+      d_a_stride,
+      d_b_shape,
+      d_b_stride,
+      d_out_shape,
+      static_cast<int>(shape.size()),
+      static_cast<int>(other.shape.size()),
+      static_cast<int>(out_shape.size()),
+      out.size);
+
+  free_device_int_vector(d_a_shape, shape);
+  free_device_int_vector(d_a_stride, stride);
+  free_device_int_vector(d_b_shape, other.shape);
+  free_device_int_vector(d_b_stride, other.stride);
+  free_device_int_vector(d_out_shape, out_shape);
+
+  return out;
+}
+
+Tensor Tensor::operator*(const Tensor &other) const
+{
+  std::vector<int> out_shape = broadcast_shape(shape, other.shape);
+
+  Tensor out(out_shape);
+
+  // Fast path: same shape
+  if (shape == other.shape)
+  {
+    launch_mul(d_data, other.d_data, out.d_data, size);
+    return out;
+  }
+
+  int *d_a_shape = copy_int_vector_to_device(shape);
+  int *d_a_stride = copy_int_vector_to_device(stride);
+  int *d_b_shape = copy_int_vector_to_device(other.shape);
+  int *d_b_stride = copy_int_vector_to_device(other.stride);
+  int *d_out_shape = copy_int_vector_to_device(out_shape);
+
+  launch_mul_broadcast(
+      d_data,
+      other.d_data,
+      out.d_data,
+      d_a_shape,
+      d_a_stride,
+      d_b_shape,
+      d_b_stride,
+      d_out_shape,
+      static_cast<int>(shape.size()),
+      static_cast<int>(other.shape.size()),
+      static_cast<int>(out_shape.size()),
+      out.size);
+
+  free_device_int_vector(d_a_shape, shape);
+  free_device_int_vector(d_a_stride, stride);
+  free_device_int_vector(d_b_shape, other.shape);
+  free_device_int_vector(d_b_stride, other.stride);
+  free_device_int_vector(d_out_shape, out_shape);
+
   return out;
 }
 
 Tensor Tensor::operator/(const Tensor &other) const
 {
-  if (shape != other.shape)
-    throw std::runtime_error("Division requires tensors to be of same shape");
-  Tensor out(shape);
-  launch_div(d_data, other.d_data, out.d_data, size);
+  std::vector<int> out_shape = broadcast_shape(shape, other.shape);
+
+  Tensor out(out_shape);
+
+  // Fast path: same shape
+  if (shape == other.shape)
+  {
+    launch_div(d_data, other.d_data, out.d_data, size);
+    return out;
+  }
+
+  int *d_a_shape = copy_int_vector_to_device(shape);
+  int *d_a_stride = copy_int_vector_to_device(stride);
+  int *d_b_shape = copy_int_vector_to_device(other.shape);
+  int *d_b_stride = copy_int_vector_to_device(other.stride);
+  int *d_out_shape = copy_int_vector_to_device(out_shape);
+
+  launch_div_broadcast(
+      d_data,
+      other.d_data,
+      out.d_data,
+      d_a_shape,
+      d_a_stride,
+      d_b_shape,
+      d_b_stride,
+      d_out_shape,
+      static_cast<int>(shape.size()),
+      static_cast<int>(other.shape.size()),
+      static_cast<int>(out_shape.size()),
+      out.size);
+
+  free_device_int_vector(d_a_shape, shape);
+  free_device_int_vector(d_a_stride, stride);
+  free_device_int_vector(d_b_shape, other.shape);
+  free_device_int_vector(d_b_stride, other.stride);
+  free_device_int_vector(d_out_shape, out_shape);
+
   return out;
 }
 
