@@ -1,18 +1,35 @@
+# Build directories
 build/
-venv/
+dist/
+*.egg-info/
 
+# Python
 __pycache__/
 *.pyc
+*.pyo
 
-*.pyd
-*.dll
-*.so
-*.o
-*.obj
-*.lib
-*.exp
+# Virtual environments
+venv/
+wheeltest/
 
+# CMake
+CMakeUserPresets.json
+CMakeCache.txt
+CMakeFiles/
+
+# IDEs
 .vscode/
 .idea/
-*.egg-info/
-dist/
+
+# Generated binaries
+*.pyd
+*.so
+*.dll
+*.obj
+*.exp
+*.lib
+
+# Nsight reports
+*.nsys-rep
+*.sqlite
+*.qdstrm
