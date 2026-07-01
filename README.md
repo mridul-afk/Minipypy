@@ -1,29 +1,8 @@
 # MiniPyPy
 
-> A PyTorch-inspired tensor framework built entirely from scratch using **C++**, **CUDA**, and **pybind11**.
+MiniPyPy is a PyTorch-inspired tensor framework built entirely from scratch using **C++**, **CUDA**, and **pybind11**.
 
-**Current Version:** `v0.3.0`
-
-MiniPyPy is an educational deep learning framework whose purpose is to understand how modern frameworks such as PyTorch work internally by implementing every major subsystem from first principles.
-
-Rather than wrapping existing libraries, MiniPyPy focuses on building the core runtime—from tensor storage and CUDA kernels to memory management, automatic differentiation, and eventually neural network execution.
-
----
-
-# Philosophy
-
-Modern deep learning frameworks hide enormous engineering complexity behind a simple Python API.
-
-MiniPyPy aims to expose that complexity by implementing every major component manually, allowing developers to understand:
-
-- Tensor memory layout
-- CUDA kernel execution
-- GPU memory management
-- Python ↔ C++ bindings
-- Automatic differentiation
-- Neural network execution
-
-The long-term goal is for MiniPyPy to become the computational backend powering **TensorFold**, a tensor-decomposition-based deep learning framework.
+The goal of this project is to understand how modern deep learning frameworks such as PyTorch work internally by implementing every major component from first principles.
 
 ---
 
@@ -31,25 +10,46 @@ The long-term goal is for MiniPyPy to become the computational backend powering 
 
 ## Tensor System
 
-- Custom Tensor class
-- N-dimensional tensor creation
-- Shape metadata
-- Stride computation
-- GPU-first tensor storage
-- CPU ↔ GPU memory transfers
+* Custom Tensor class
+* N-dimensional tensor creation
+* Nested Python list support
+* Shape & stride metadata
+* GPU-first tensor storage
+* CPU ↔ GPU memory transfers
+* Shape validation
+* Ragged tensor detection
+
+## Tensor Operations
+
+* Element-wise addition
+* Element-wise subtraction
+* Element-wise multiplication
+* Element-wise division
+* Broadcasting (NumPy/PyTorch style)
+* 2D Matrix Multiplication
+* Reshape
+* Flatten
+* 2D Transpose
+
+## Reduction Operations
+
+* Sum
+* Mean
+* Max
 
 ## CUDA Backend
 
-- CUDA-accelerated element-wise operations
-- General 2D matrix multiplication
-- Asynchronous CUDA kernel execution
-- Custom CUDA memory pool
-- Automatic GPU memory reuse
+* CUDA-accelerated tensor operations
+* Asynchronous kernel execution
+* Custom CUDA memory pool
+* GPU memory reuse
+* Broadcast-aware CUDA kernels
 
 ## Python Integration
 
-- Python bindings using pybind11
-- Native Python API
+* Python bindings using pybind11
+* Natural nested-list tensor construction
+* Readable N-dimensional tensor printing
 
 ---
 
@@ -58,61 +58,52 @@ The long-term goal is for MiniPyPy to become the computational backend powering 
 ```python
 import minipypy as mini
 
-a = mini.Tensor(
-    [1, 2,
-     3, 4],
-    [2, 2]
-)
+a = mini.Tensor([
+    [1, 2, 3],
+    [4, 5, 6]
+])
 
-b = mini.Tensor(
-    [5, 6,
-     7, 8],
-    [2, 2]
-)
+b = mini.Tensor([10, 20, 30])
 
-c = a + b
+print(a + b)
 
-print(c.cpu())
+print(a.matmul(
+    mini.Tensor([
+        [1, 2],
+        [3, 4],
+        [5, 6]
+    ])
+))
+
+print(a.sum())
+print(a.mean())
+print(a.max())
+
+print(a.reshape([3, 2]))
+print(a.flatten())
+print(a.transpose())
 ```
 
 ---
 
 # Current Capabilities
 
-- ✅ N-dimensional tensor creation
-- ✅ Shape & stride metadata
-- ✅ CUDA element-wise operations
-- ✅ General 2D matrix multiplication
-- ✅ CUDA memory pooling
-- ✅ Automatic GPU memory reuse
-- ✅ Shape validation
-- ✅ Shape preservation
-- ✅ Move semantics
-- ✅ Python bindings via pybind11
-
----
-
-# Project Structure
-
-```
-MiniPyPy
-│
-├── src/
-│   ├── bindings.cpp
-│   ├── tensor.cpp
-│   ├── tensor.cu
-│   ├── memory_pool.cpp
-│   ├── memory_pool.h
-│   └── tensor.h
-│
-├── minipypy/
-│
-├── tests/
-│
-├── CMakeLists.txt
-│
-└── pyproject.toml
-```
+* ✅ N-dimensional tensors
+* ✅ Nested-list tensor construction
+* ✅ Shape & stride management
+* ✅ Broadcasting
+* ✅ Element-wise tensor operations
+* ✅ 2D matrix multiplication
+* ✅ Reshape
+* ✅ Flatten
+* ✅ 2D transpose
+* ✅ Tensor reductions
+* ✅ CUDA memory pooling
+* ✅ Automatic GPU memory reuse
+* ✅ Shape validation
+* ✅ Ragged tensor validation
+* ✅ Move semantics
+* ✅ Readable tensor representation
 
 ---
 
@@ -120,73 +111,53 @@ MiniPyPy
 
 ## v0.1.0
 
-- Tensor class
-- CUDA backend
-- Python bindings
-
----
+* Tensor class
+* CUDA backend
+* Python bindings
 
 ## v0.2.0
 
-- N-dimensional tensor support
-- General 2D matrix multiplication
-- Shape & stride metadata
-
----
+* N-dimensional tensors
+* General 2D matrix multiplication
+* Shape & stride metadata
 
 ## v0.3.0
 
-### Performance & Memory Management
-
-- CUDA memory pool
-- GPU memory reuse
-- Shape validation
-- Shape preservation
-- Asynchronous CUDA execution
-
----
+* CUDA memory pool
+* Shape validation
+* Shape preservation
+* Asynchronous CUDA execution
 
 ## v0.4.0
 
-### Tensor Operations
-
-- Broadcasting
-- Tensor reshaping
-- Tensor transpose
-- Tensor indexing
-- Tensor slicing
-
----
+* Broadcasting
+* Reshape
+* Flatten
+* 2D Transpose
+* Sum / Mean / Max reductions
+* Nested-list tensor construction
+* N-dimensional tensor printing
+* Ragged tensor validation
 
 ## v0.5.0
 
-### Automatic Differentiation
-
-- Computational graph
-- Backpropagation
-- Gradient accumulation
-
----
+* Automatic differentiation (Autograd)
+* Computational graph
+* Gradient propagation
 
 ## v0.6.0
 
-### Neural Networks
-
-- Linear layers
-- Activation functions
-- Loss functions
-- Optimizers
-
----
+* Neural network layers
+* Activation functions
+* Loss functions
+* Optimizers
 
 ## v1.0.0
 
-### TensorFold Integration
-
-- Tensor decomposition layers
-- Low-rank tensor operations
-- Model compression support
-- TensorFold backend
+* TensorFold integration
+* Tensor decomposition layers
+* Model compression
+* Training support
 
 ---
 
@@ -205,13 +176,13 @@ cd Minipypy
 python -m venv venv
 ```
 
-### Windows
+Windows
 
 ```bash
 venv\Scripts\activate
 ```
 
-### Linux / macOS
+Linux/macOS
 
 ```bash
 source venv/bin/activate
@@ -227,9 +198,7 @@ pip install -e .
 
 ```bash
 cmake -B build -DCMAKE_BUILD_TYPE=Release
-
 cmake --build build --config Release
-
 cmake --install build --config Release
 ```
 
@@ -237,41 +206,18 @@ cmake --install build --config Release
 
 # Tech Stack
 
-- C++17
-- CUDA
-- pybind11
-- CMake
-- Python
-
----
-
-# Why MiniPyPy?
-
-Deep learning frameworks are among the most sophisticated pieces of software engineering today.
-
-MiniPyPy is an attempt to understand them by building every important subsystem from scratch rather than treating them as black boxes.
-
-By the end of the project, MiniPyPy will include:
-
-- Tensor runtime
-- CUDA backend
-- Memory allocator
-- Automatic differentiation
-- Neural network execution
-- Tensor decomposition support
+* C++17
+* CUDA
+* pybind11
+* CMake
+* Python
 
 ---
 
 # Vision
 
-MiniPyPy is **not** intended to replace PyTorch.
+MiniPyPy is an educational deep learning framework designed to explore how modern tensor libraries work internally.
 
-Instead, it serves as a learning-oriented framework for exploring how modern tensor libraries are engineered internally.
+Rather than wrapping existing frameworks, MiniPyPy implements tensor operations, CUDA kernels, memory management, broadcasting, reductions, and eventually automatic differentiation completely from scratch.
 
-The ultimate objective is to develop a complete deep learning framework from first principles and use MiniPyPy as the computational backend for **TensorFold**, enabling efficient experimentation with tensor decomposition techniques, model compression, and high-performance deep learning systems.
-
----
-
-## License
-
-This project is licensed under the MIT License.
+The long-term goal is to serve as the computational backend for **TensorFold**, a tensor-decomposition-based deep learning framework focused on efficient model compression and deployment.
