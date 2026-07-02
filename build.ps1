@@ -1,5 +1,20 @@
 Write-Host "=== Building MiniPyPy ==="
 
+# Sync editable install only when needed
+if ($args -contains "-sync") {
+  Write-Host "=== Syncing editable install ==="
+
+  pip install -e . `
+    --config-settings=cmake.define.CMAKE_CUDA_COMPILER="C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.0/bin/nvcc.exe" `
+    --config-settings=cmake.define.CUDAToolkit_ROOT="C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.0" `
+    --config-settings=cmake.args="-G Ninja"
+
+  if ($LASTEXITCODE -ne 0) {
+    Write-Host "Editable install failed."
+    exit $LASTEXITCODE
+  }
+}
+
 cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$PWD"
 
 if ($LASTEXITCODE -ne 0) {
