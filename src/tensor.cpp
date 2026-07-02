@@ -11,11 +11,40 @@ void launch_add(const float *a, const float *b, float *out, int size);
 void launch_mul(const float *a, const float *b, float *out, int size);
 void launch_sub(const float *a, const float *b, float *out, int size);
 void launch_div(const float *a, const float *b, float *out, int size);
+
 void launch_matmul(const float *a, const float *b, float *out, int M, int N, int K);
+
+void launch_batched_matmul(
+    const float *A,
+    const float *B,
+    float *C,
+    int M,
+    int N,
+    int K,
+    int batch_size);
+
+void launch_broadcasted_batched_matmul(
+    const float *A,
+    const float *B,
+    float *C,
+    const int *a_batch_shape,
+    const int *a_batch_stride,
+    const int *b_batch_shape,
+    const int *b_batch_stride,
+    const int *out_batch_shape,
+    int a_batch_ndim,
+    int b_batch_ndim,
+    int out_batch_ndim,
+    int M,
+    int N,
+    int K,
+    int out_batch_size);
+
 void launch_transpose(const float *input, float *output, int rows, int cols);
 void launch_sum(const float *input, float *output, int size);
 void launch_divide_scalar(float *data, float scalar);
 void launch_max(const float *input, float *output, int size);
+
 void launch_add_broadcast(
     const float *a,
     const float *b,
@@ -72,15 +101,6 @@ void launch_div_broadcast(
     int out_ndim,
     int out_size);
 
-void launch_batched_matmul(
-    const float *A,
-    const float *B,
-    float *C,
-    int M,
-    int N,
-    int K,
-    int batch_size);
-
 std::vector<int> broadcast_shape(
     const std::vector<int> &a,
     const std::vector<int> &b)
@@ -89,7 +109,6 @@ std::vector<int> broadcast_shape(
   int ndim_b = static_cast<int>(b.size());
 
   int ndim_out = std::max(ndim_a, ndim_b);
-
   std::vector<int> out_shape(ndim_out);
 
   for (int i = 0; i < ndim_out; i++)
@@ -111,6 +130,67 @@ std::vector<int> broadcast_shape(
 
     out_shape[ndim_out - 1 - i] = std::max(dim_a, dim_b);
   }
+
+  return out_shape;
+}
+
+std::vector<int> batch_shape_of_matmul(const std::vector<int> &shape)
+{
+  if (shape.size() < 2)
+    throw std::runtime_error("matmul requires tensors with at least 2 dimensions");
+
+  return std::vector<int>(shape.begin(), shape.end() - 2);
+}
+
+std::vector<int> compute_stride_from_shape(const std::vector<int> &shape)
+{
+  std::vector<int> stride(shape.size());
+
+  int running = 1;
+
+  for (int i = static_cast<int>(shape.size()) - 1; i >= 0; i--)
+  {
+    stride[i] = running;
+    running *= shape[i];
+  }
+
+  return stride;
+}
+
+int numel_from_shape(const std::vector<int> &shape)
+{
+  int total = 1;
+
+  for (int dim : shape)
+    total *= dim;
+
+  return total;
+}
+
+std::vector<int> matmul_output_shape(
+    const std::vector<int> &a_shape,
+    const std::vector<int> &b_shape)
+{
+  if (a_shape.size() < 2 || b_shape.size() < 2)
+    throw std::runtime_error("matmul requires tensors with at least 2 dimensions");
+
+  int M = a_shape[a_shape.size() - 2];
+  int K = a_shape[a_shape.size() - 1];
+
+  int K_other = b_shape[b_shape.size() - 2];
+  int N = b_shape[b_shape.size() - 1];
+
+  if (K != K_other)
+    throw std::runtime_error("matmul shape mismatch");
+
+  std::vector<int> a_batch = batch_shape_of_matmul(a_shape);
+  std::vector<int> b_batch = batch_shape_of_matmul(b_shape);
+
+  std::vector<int> out_batch = broadcast_shape(a_batch, b_batch);
+
+  std::vector<int> out_shape = out_batch;
+  out_shape.push_back(M);
+  out_shape.push_back(N);
 
   return out_shape;
 }
@@ -226,7 +306,6 @@ Tensor::Tensor(const std::vector<float> &host_data, std::vector<int> shape)
       cudaMemcpyHostToDevice);
 }
 
-// Disable copy in tensor.h, enable move.
 Tensor::Tensor(Tensor &&other) noexcept
 {
   this->d_data = other.d_data;
@@ -285,10 +364,8 @@ std::vector<float> Tensor::cpu() const
 Tensor Tensor::operator+(const Tensor &other) const
 {
   std::vector<int> out_shape = broadcast_shape(shape, other.shape);
-
   Tensor out(out_shape);
 
-  // Fast path: same shape
   if (shape == other.shape)
   {
     launch_add(d_data, other.d_data, out.d_data, size);
@@ -327,10 +404,8 @@ Tensor Tensor::operator+(const Tensor &other) const
 Tensor Tensor::operator-(const Tensor &other) const
 {
   std::vector<int> out_shape = broadcast_shape(shape, other.shape);
-
   Tensor out(out_shape);
 
-  // Fast path: same shape
   if (shape == other.shape)
   {
     launch_sub(d_data, other.d_data, out.d_data, size);
@@ -369,10 +444,8 @@ Tensor Tensor::operator-(const Tensor &other) const
 Tensor Tensor::operator*(const Tensor &other) const
 {
   std::vector<int> out_shape = broadcast_shape(shape, other.shape);
-
   Tensor out(out_shape);
 
-  // Fast path: same shape
   if (shape == other.shape)
   {
     launch_mul(d_data, other.d_data, out.d_data, size);
@@ -411,10 +484,8 @@ Tensor Tensor::operator*(const Tensor &other) const
 Tensor Tensor::operator/(const Tensor &other) const
 {
   std::vector<int> out_shape = broadcast_shape(shape, other.shape);
-
   Tensor out(out_shape);
 
-  // Fast path: same shape
   if (shape == other.shape)
   {
     launch_div(d_data, other.d_data, out.d_data, size);
@@ -452,52 +523,25 @@ Tensor Tensor::operator/(const Tensor &other) const
 
 Tensor Tensor::matmul(const Tensor &other) const
 {
-  if (shape.size() < 2 || other.shape.size() < 2)
-    throw std::runtime_error("NEW ND MATMUL FUNCTION IS ACTIVE");
-
-  int ndim = static_cast<int>(shape.size());
-  int other_ndim = static_cast<int>(other.shape.size());
-
-  if (ndim != other_ndim)
-    throw std::runtime_error("N-D matmul currently requires same number of dimensions");
-
-  // Check batch dimensions
-  for (int i = 0; i < ndim - 2; i++)
-  {
-    if (shape[i] != other.shape[i])
-      throw std::runtime_error("N-D matmul batch dimensions must match");
-  }
-
-  int M = shape[ndim - 2];
-  int K = shape[ndim - 1];
-
-  int K_other = other.shape[other_ndim - 2];
-  int N = other.shape[other_ndim - 1];
-
-  if (K != K_other)
-    throw std::runtime_error("matmul shape mismatch");
-
-  std::vector<int> out_shape;
-
-  for (int i = 0; i < ndim - 2; i++)
-    out_shape.push_back(shape[i]);
-
-  out_shape.push_back(M);
-  out_shape.push_back(N);
-
+  std::vector<int> out_shape = matmul_output_shape(shape, other.shape);
   Tensor out(out_shape);
 
-  if (ndim == 2)
+  std::vector<int> a_batch = batch_shape_of_matmul(shape);
+  std::vector<int> b_batch = batch_shape_of_matmul(other.shape);
+  std::vector<int> out_batch = batch_shape_of_matmul(out_shape);
+
+  int M = shape[shape.size() - 2];
+  int K = shape[shape.size() - 1];
+  int N = other.shape[other.shape.size() - 1];
+
+  int out_batch_size = numel_from_shape(out_batch);
+
+  if (shape.size() == 2 && other.shape.size() == 2)
   {
     launch_matmul(d_data, other.d_data, out.d_data, M, N, K);
   }
-  else
+  else if (a_batch == b_batch)
   {
-    int batch_size = 1;
-
-    for (int i = 0; i < ndim - 2; i++)
-      batch_size *= shape[i];
-
     launch_batched_matmul(
         d_data,
         other.d_data,
@@ -505,7 +549,41 @@ Tensor Tensor::matmul(const Tensor &other) const
         M,
         N,
         K,
-        batch_size);
+        out_batch_size);
+  }
+  else
+  {
+    std::vector<int> a_batch_stride = compute_stride_from_shape(a_batch);
+    std::vector<int> b_batch_stride = compute_stride_from_shape(b_batch);
+
+    int *d_a_batch_shape = copy_int_vector_to_device(a_batch);
+    int *d_a_batch_stride = copy_int_vector_to_device(a_batch_stride);
+    int *d_b_batch_shape = copy_int_vector_to_device(b_batch);
+    int *d_b_batch_stride = copy_int_vector_to_device(b_batch_stride);
+    int *d_out_batch_shape = copy_int_vector_to_device(out_batch);
+
+    launch_broadcasted_batched_matmul(
+        d_data,
+        other.d_data,
+        out.d_data,
+        d_a_batch_shape,
+        d_a_batch_stride,
+        d_b_batch_shape,
+        d_b_batch_stride,
+        d_out_batch_shape,
+        static_cast<int>(a_batch.size()),
+        static_cast<int>(b_batch.size()),
+        static_cast<int>(out_batch.size()),
+        M,
+        N,
+        K,
+        out_batch_size);
+
+    free_device_int_vector(d_a_batch_shape, a_batch);
+    free_device_int_vector(d_a_batch_stride, a_batch_stride);
+    free_device_int_vector(d_b_batch_shape, b_batch);
+    free_device_int_vector(d_b_batch_stride, b_batch_stride);
+    free_device_int_vector(d_out_batch_shape, out_batch);
   }
 
   return out;

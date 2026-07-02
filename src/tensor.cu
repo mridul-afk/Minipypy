@@ -353,6 +353,111 @@ __global__ void batched_matmul_kernel(
     C_batch[row * N + col] = sum;
 }
 
+__device__ int compute_broadcast_batch_index(
+    int out_batch,
+    const int *input_batch_shape,
+    const int *input_batch_stride,
+    const int *out_batch_shape,
+    int input_batch_ndim,
+    int out_batch_ndim)
+{
+  int temp = out_batch;
+  int input_batch_index = 0;
+
+  for (int dim = out_batch_ndim - 1; dim >= 0; dim--)
+  {
+    int coord = temp % out_batch_shape[dim];
+    temp /= out_batch_shape[dim];
+
+    int input_dim = dim - (out_batch_ndim - input_batch_ndim);
+
+    if (input_dim >= 0)
+    {
+      int input_coord =
+          (input_batch_shape[input_dim] == 1) ? 0 : coord;
+
+      input_batch_index += input_coord * input_batch_stride[input_dim];
+    }
+  }
+
+  return input_batch_index;
+}
+
+__global__ void broadcasted_batched_matmul_kernel(
+    const float *A,
+    const float *B,
+    float *C,
+    const int *a_batch_shape,
+    const int *a_batch_stride,
+    const int *b_batch_shape,
+    const int *b_batch_stride,
+    const int *out_batch_shape,
+    int a_batch_ndim,
+    int b_batch_ndim,
+    int out_batch_ndim,
+    int M,
+    int N,
+    int K,
+    int out_batch_size)
+{
+  int out_batch = blockIdx.z;
+
+  if (out_batch >= out_batch_size)
+    return;
+
+  int a_batch_index = compute_broadcast_batch_index(
+      out_batch,
+      a_batch_shape,
+      a_batch_stride,
+      out_batch_shape,
+      a_batch_ndim,
+      out_batch_ndim);
+
+  int b_batch_index = compute_broadcast_batch_index(
+      out_batch,
+      b_batch_shape,
+      b_batch_stride,
+      out_batch_shape,
+      b_batch_ndim,
+      out_batch_ndim);
+
+  const float *A_batch = A + a_batch_index * M * K;
+  const float *B_batch = B + b_batch_index * K * N;
+  float *C_batch = C + out_batch * M * N;
+
+  int row = blockIdx.y * TILE_SIZE + threadIdx.y;
+  int col = blockIdx.x * TILE_SIZE + threadIdx.x;
+
+  __shared__ float sh_A[TILE_SIZE][TILE_SIZE];
+  __shared__ float sh_B[TILE_SIZE][TILE_SIZE];
+
+  float sum = 0.0f;
+
+  int num_tiles = (K + TILE_SIZE - 1) / TILE_SIZE;
+
+  for (int tile = 0; tile < num_tiles; tile++)
+  {
+    int a_col = tile * TILE_SIZE + threadIdx.x;
+    int b_row = tile * TILE_SIZE + threadIdx.y;
+
+    sh_A[threadIdx.y][threadIdx.x] =
+        (row < M && a_col < K) ? A_batch[row * K + a_col] : 0.0f;
+
+    sh_B[threadIdx.y][threadIdx.x] =
+        (b_row < K && col < N) ? B_batch[b_row * N + col] : 0.0f;
+
+    __syncthreads();
+
+    for (int i = 0; i < TILE_SIZE; i++)
+      sum += sh_A[threadIdx.y][i] * sh_B[i][threadIdx.x];
+
+    __syncthreads();
+  }
+
+  if (row < M && col < N)
+    C_batch[row * N + col] = sum;
+}
+
 void launch_add(const float *a, const float *b, float *out, int size)
 {
   add_kernel<<<(size + 255) / 256, 256>>>(a, b, out, size);
@@ -547,4 +652,44 @@ void launch_batched_matmul(
       N,
       K,
       batch_size);
+}
+
+void launch_broadcasted_batched_matmul(
+    const float *A,
+    const float *B,
+    float *C,
+    const int *a_batch_shape,
+    const int *a_batch_stride,
+    const int *b_batch_shape,
+    const int *b_batch_stride,
+    const int *out_batch_shape,
+    int a_batch_ndim,
+    int b_batch_ndim,
+    int out_batch_ndim,
+    int M,
+    int N,
+    int K,
+    int out_batch_size)
+{
+  dim3 block(TILE_SIZE, TILE_SIZE);
+  dim3 grid((N + TILE_SIZE - 1) / TILE_SIZE,
+            (M + TILE_SIZE - 1) / TILE_SIZE,
+            out_batch_size);
+
+  broadcasted_batched_matmul_kernel<<<grid, block>>>(
+      A,
+      B,
+      C,
+      a_batch_shape,
+      a_batch_stride,
+      b_batch_shape,
+      b_batch_stride,
+      out_batch_shape,
+      a_batch_ndim,
+      b_batch_ndim,
+      out_batch_ndim,
+      M,
+      N,
+      K,
+      out_batch_size);
 }
