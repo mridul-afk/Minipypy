@@ -302,6 +302,57 @@ __global__ void div_broadcast_kernel(
   out[idx] = a[a_offset] / b[b_offset];
 }
 
+__global__ void batched_matmul_kernel(
+    const float *A,
+    const float *B,
+    float *C,
+    int M,
+    int N,
+    int K,
+    int batch_size)
+{
+  int batch = blockIdx.z;
+
+  if (batch >= batch_size)
+    return;
+
+  int row = blockIdx.y * TILE_SIZE + threadIdx.y;
+  int col = blockIdx.x * TILE_SIZE + threadIdx.x;
+
+  const float *A_batch = A + batch * M * K;
+  const float *B_batch = B + batch * K * N;
+  float *C_batch = C + batch * M * N;
+
+  __shared__ float sh_A[TILE_SIZE][TILE_SIZE];
+  __shared__ float sh_B[TILE_SIZE][TILE_SIZE];
+
+  float sum = 0.0f;
+
+  int num_tiles = (K + TILE_SIZE - 1) / TILE_SIZE;
+
+  for (int tile = 0; tile < num_tiles; tile++)
+  {
+    int a_col = tile * TILE_SIZE + threadIdx.x;
+    int b_row = tile * TILE_SIZE + threadIdx.y;
+
+    sh_A[threadIdx.y][threadIdx.x] =
+        (row < M && a_col < K) ? A_batch[row * K + a_col] : 0.0f;
+
+    sh_B[threadIdx.y][threadIdx.x] =
+        (b_row < K && col < N) ? B_batch[b_row * N + col] : 0.0f;
+
+    __syncthreads();
+
+    for (int i = 0; i < TILE_SIZE; i++)
+      sum += sh_A[threadIdx.y][i] * sh_B[i][threadIdx.x];
+
+    __syncthreads();
+  }
+
+  if (row < M && col < N)
+    C_batch[row * N + col] = sum;
+}
+
 void launch_add(const float *a, const float *b, float *out, int size)
 {
   add_kernel<<<(size + 255) / 256, 256>>>(a, b, out, size);
@@ -472,4 +523,28 @@ void launch_div_broadcast(
       b_shape, b_stride,
       out_shape,
       a_ndim, b_ndim, out_ndim, out_size);
+}
+
+void launch_batched_matmul(
+    const float *A,
+    const float *B,
+    float *C,
+    int M,
+    int N,
+    int K,
+    int batch_size)
+{
+  dim3 block(TILE_SIZE, TILE_SIZE);
+  dim3 grid((N + TILE_SIZE - 1) / TILE_SIZE,
+            (M + TILE_SIZE - 1) / TILE_SIZE,
+            batch_size);
+
+  batched_matmul_kernel<<<grid, block>>>(
+      A,
+      B,
+      C,
+      M,
+      N,
+      K,
+      batch_size);
 }

@@ -72,6 +72,15 @@ void launch_div_broadcast(
     int out_ndim,
     int out_size);
 
+void launch_batched_matmul(
+    const float *A,
+    const float *B,
+    float *C,
+    int M,
+    int N,
+    int K,
+    int batch_size);
+
 std::vector<int> broadcast_shape(
     const std::vector<int> &a,
     const std::vector<int> &b)
@@ -443,21 +452,61 @@ Tensor Tensor::operator/(const Tensor &other) const
 
 Tensor Tensor::matmul(const Tensor &other) const
 {
-  if (shape.size() != 2 || other.shape.size() != 2)
-    throw std::runtime_error("matmul currently supports only 2D tensors");
+  if (shape.size() < 2 || other.shape.size() < 2)
+    throw std::runtime_error("NEW ND MATMUL FUNCTION IS ACTIVE");
 
-  int M = shape[0];
-  int K = shape[1];
+  int ndim = static_cast<int>(shape.size());
+  int other_ndim = static_cast<int>(other.shape.size());
 
-  int K_other = other.shape[0];
-  int N = other.shape[1];
+  if (ndim != other_ndim)
+    throw std::runtime_error("N-D matmul currently requires same number of dimensions");
+
+  // Check batch dimensions
+  for (int i = 0; i < ndim - 2; i++)
+  {
+    if (shape[i] != other.shape[i])
+      throw std::runtime_error("N-D matmul batch dimensions must match");
+  }
+
+  int M = shape[ndim - 2];
+  int K = shape[ndim - 1];
+
+  int K_other = other.shape[other_ndim - 2];
+  int N = other.shape[other_ndim - 1];
 
   if (K != K_other)
     throw std::runtime_error("matmul shape mismatch");
 
-  Tensor out(std::vector<int>{M, N});
+  std::vector<int> out_shape;
 
-  launch_matmul(d_data, other.d_data, out.d_data, M, N, K);
+  for (int i = 0; i < ndim - 2; i++)
+    out_shape.push_back(shape[i]);
+
+  out_shape.push_back(M);
+  out_shape.push_back(N);
+
+  Tensor out(out_shape);
+
+  if (ndim == 2)
+  {
+    launch_matmul(d_data, other.d_data, out.d_data, M, N, K);
+  }
+  else
+  {
+    int batch_size = 1;
+
+    for (int i = 0; i < ndim - 2; i++)
+      batch_size *= shape[i];
+
+    launch_batched_matmul(
+        d_data,
+        other.d_data,
+        out.d_data,
+        M,
+        N,
+        K,
+        batch_size);
+  }
 
   return out;
 }
