@@ -221,25 +221,29 @@ void free_device_int_vector(int *ptr, const std::vector<int> &host)
   CudaMemoryPool::instance().deallocate(ptr, bytes);
 }
 
-Tensor::Tensor(int size)
+Tensor::Tensor(int size, bool requires_grad)
 {
   this->size = size;
   this->shape = {size};
   this->stride = {1};
   this->is_cuda = true;
   this->d_data = nullptr;
+  this->requires_grad = requires_grad;
+  this->grad_tensor = nullptr;
 
   d_data = static_cast<float *>(
       CudaMemoryPool::instance().allocate(size * sizeof(float)));
 }
 
-Tensor::Tensor(const std::vector<float> &host_data)
+Tensor::Tensor(const std::vector<float> &host_data, bool requires_grad)
 {
   this->size = static_cast<int>(host_data.size());
   this->shape = {size};
   this->stride = {1};
   this->is_cuda = true;
   this->d_data = nullptr;
+  this->requires_grad = requires_grad;
+  this->grad_tensor = nullptr;
 
   d_data = static_cast<float *>(
       CudaMemoryPool::instance().allocate(size * sizeof(float)));
@@ -251,12 +255,14 @@ Tensor::Tensor(const std::vector<float> &host_data)
       cudaMemcpyHostToDevice);
 }
 
-Tensor::Tensor(std::vector<int> shape)
+Tensor::Tensor(std::vector<int> shape, bool requires_grad)
 {
   this->shape = shape;
   this->size = 1;
   this->is_cuda = true;
   this->d_data = nullptr;
+  this->requires_grad = requires_grad;
+  this->grad_tensor = nullptr;
 
   for (int dim : shape)
     this->size *= dim;
@@ -274,12 +280,17 @@ Tensor::Tensor(std::vector<int> shape)
       CudaMemoryPool::instance().allocate(size * sizeof(float)));
 }
 
-Tensor::Tensor(const std::vector<float> &host_data, std::vector<int> shape)
+Tensor::Tensor(
+    const std::vector<float> &host_data,
+    std::vector<int> shape,
+    bool requires_grad)
 {
   this->shape = shape;
   this->size = 1;
   this->is_cuda = true;
   this->d_data = nullptr;
+  this->requires_grad = requires_grad;
+  this->grad_tensor = nullptr;
 
   for (int dim : shape)
     this->size *= dim;
@@ -313,9 +324,13 @@ Tensor::Tensor(Tensor &&other) noexcept
   this->shape = std::move(other.shape);
   this->stride = std::move(other.stride);
   this->is_cuda = other.is_cuda;
+  this->requires_grad = other.requires_grad;
+  this->grad_tensor = other.grad_tensor;
 
   other.d_data = nullptr;
+  other.grad_tensor = nullptr;
   other.size = 0;
+  other.requires_grad = false;
 }
 
 Tensor &Tensor::operator=(Tensor &&other) noexcept
@@ -329,14 +344,23 @@ Tensor &Tensor::operator=(Tensor &&other) noexcept
           this->size * sizeof(float));
     }
 
+    if (this->grad_tensor)
+    {
+      delete this->grad_tensor;
+    }
+
     this->d_data = other.d_data;
     this->size = other.size;
     this->shape = std::move(other.shape);
     this->stride = std::move(other.stride);
     this->is_cuda = other.is_cuda;
+    this->requires_grad = other.requires_grad;
+    this->grad_tensor = other.grad_tensor;
 
     other.d_data = nullptr;
+    other.grad_tensor = nullptr;
     other.size = 0;
+    other.requires_grad = false;
   }
 
   return *this;
@@ -346,6 +370,9 @@ Tensor::~Tensor()
 {
   if (d_data)
     CudaMemoryPool::instance().deallocate(d_data, size * sizeof(float));
+
+  if (grad_tensor)
+    delete grad_tensor;
 }
 
 std::vector<float> Tensor::cpu() const
@@ -364,7 +391,7 @@ std::vector<float> Tensor::cpu() const
 Tensor Tensor::operator+(const Tensor &other) const
 {
   std::vector<int> out_shape = broadcast_shape(shape, other.shape);
-  Tensor out(out_shape);
+  Tensor out(out_shape, requires_grad || other.requires_grad);
 
   if (shape == other.shape)
   {
@@ -404,7 +431,7 @@ Tensor Tensor::operator+(const Tensor &other) const
 Tensor Tensor::operator-(const Tensor &other) const
 {
   std::vector<int> out_shape = broadcast_shape(shape, other.shape);
-  Tensor out(out_shape);
+  Tensor out(out_shape, requires_grad || other.requires_grad);
 
   if (shape == other.shape)
   {
@@ -444,7 +471,7 @@ Tensor Tensor::operator-(const Tensor &other) const
 Tensor Tensor::operator*(const Tensor &other) const
 {
   std::vector<int> out_shape = broadcast_shape(shape, other.shape);
-  Tensor out(out_shape);
+  Tensor out(out_shape, requires_grad || other.requires_grad);
 
   if (shape == other.shape)
   {
@@ -484,7 +511,7 @@ Tensor Tensor::operator*(const Tensor &other) const
 Tensor Tensor::operator/(const Tensor &other) const
 {
   std::vector<int> out_shape = broadcast_shape(shape, other.shape);
-  Tensor out(out_shape);
+  Tensor out(out_shape, requires_grad || other.requires_grad);
 
   if (shape == other.shape)
   {
@@ -524,7 +551,7 @@ Tensor Tensor::operator/(const Tensor &other) const
 Tensor Tensor::matmul(const Tensor &other) const
 {
   std::vector<int> out_shape = matmul_output_shape(shape, other.shape);
-  Tensor out(out_shape);
+  Tensor out(out_shape, requires_grad || other.requires_grad);
 
   std::vector<int> a_batch = batch_shape_of_matmul(shape);
   std::vector<int> b_batch = batch_shape_of_matmul(other.shape);
@@ -619,7 +646,7 @@ Tensor Tensor::reshape(std::vector<int> new_shape) const
   if (new_size != size)
     throw std::runtime_error("reshape size mismatch");
 
-  Tensor out(new_shape);
+  Tensor out(new_shape, requires_grad);
 
   cudaMemcpy(
       out.d_data,
@@ -643,7 +670,7 @@ Tensor Tensor::transpose() const
   int rows = shape[0];
   int cols = shape[1];
 
-  Tensor out(std::vector<int>{cols, rows});
+  Tensor out(std::vector<int>{cols, rows}, requires_grad);
 
   launch_transpose(d_data, out.d_data, rows, cols);
 
@@ -652,7 +679,7 @@ Tensor Tensor::transpose() const
 
 Tensor Tensor::sum() const
 {
-  Tensor out(std::vector<int>{1});
+  Tensor out(std::vector<int>{1}, requires_grad);
 
   launch_sum(d_data, out.d_data, size);
 
@@ -663,15 +690,16 @@ Tensor Tensor::mean() const
 {
   Tensor out = sum();
 
-  launch_divide_scalar(out.d_data,
-                       static_cast<float>(size));
+  launch_divide_scalar(
+      out.d_data,
+      static_cast<float>(size));
 
   return out;
 }
 
 Tensor Tensor::max() const
 {
-  Tensor out(std::vector<int>{1});
+  Tensor out(std::vector<int>{1}, requires_grad);
 
   launch_max(
       d_data,

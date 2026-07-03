@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vector>
+#include <memory>
 
 class Tensor
 {
@@ -12,11 +13,13 @@ public:
    std::vector<int> stride;
 
    bool is_cuda;
+   bool requires_grad;
+   Tensor *grad_tensor;
 
-   Tensor(int size);
-   Tensor(const std::vector<float> &host_data);
-   Tensor(std::vector<int> shape);
-   Tensor(const std::vector<float> &host_data, std::vector<int> shape);
+   Tensor(int size, bool requires_grad = false);
+   Tensor(const std::vector<float> &host_data, bool requires_grad = false);
+   Tensor(std::vector<int> shape, bool requires_grad = false);
+   Tensor(const std::vector<float> &host_data, std::vector<int> shape, bool requires_grad = false);
 
    // No copying because Tensor owns GPU memory
    Tensor(const Tensor &) = delete;
@@ -47,4 +50,7 @@ public:
    Tensor sum() const;
    Tensor mean() const;
    Tensor max() const;
+
+   Tensor grad() const;
+   void zero_grad();
 };

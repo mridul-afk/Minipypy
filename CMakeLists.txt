@@ -25,6 +25,7 @@ find_package(pybind11 REQUIRED)
 # 3. Create the isolated CUDA Static Engine
 add_library(minitorch_cuda_engine STATIC
   src/tensor.cu
+  src/autograd.cu
 )
 
 # Support common NVIDIA GPU architectures:
@@ -41,6 +42,7 @@ pybind11_add_module(_C
   src/bindings.cpp
   src/tensor.cpp
   src/memory_pool.cpp
+  src/autograd.cpp
 )
 
 target_include_directories(_C PRIVATE

@@ -13,14 +13,12 @@ namespace py = pybind11;
 std::vector<int> infer_shape(py::handle obj)
 {
     std::vector<int> shape;
-
     py::handle current = obj;
 
     while (py::isinstance<py::sequence>(current) &&
            !py::isinstance<py::str>(current))
     {
         py::sequence seq = py::reinterpret_borrow<py::sequence>(current);
-
         shape.push_back(static_cast<int>(seq.size()));
 
         if (seq.size() == 0)
@@ -58,9 +56,7 @@ void validate_shape_recursive(
         throw std::runtime_error("Ragged tensor: inconsistent nested list shape");
 
     for (py::handle item : seq)
-    {
         validate_shape_recursive(item, shape, dim + 1);
-    }
 }
 
 void flatten_recursive(py::handle obj, std::vector<float> &flat)
@@ -71,9 +67,7 @@ void flatten_recursive(py::handle obj, std::vector<float> &flat)
         py::sequence seq = py::reinterpret_borrow<py::sequence>(obj);
 
         for (py::handle item : seq)
-        {
             flatten_recursive(item, flat);
-        }
     }
     else
     {
@@ -139,10 +133,7 @@ std::string format_tensor_recursive(
 PYBIND11_MODULE(_C, m)
 {
     py::class_<Tensor>(m, "Tensor")
-        .def(py::init<const std::vector<float> &>())
-        .def(py::init<const std::vector<float> &, std::vector<int>>())
-
-        .def(py::init([](py::object obj)
+        .def(py::init([](py::object obj, bool requires_grad)
                       {
                           std::vector<int> shape = infer_shape(obj);
 
@@ -154,12 +145,25 @@ PYBIND11_MODULE(_C, m)
                           if (shape.empty())
                               shape = {static_cast<int>(flat.size())};
 
-                          return Tensor(flat, shape); }))
+                          return Tensor(flat, shape, requires_grad); }),
+             py::arg("data"),
+             py::arg("requires_grad") = false)
+
+        .def(py::init([](const std::vector<float> &data,
+                         std::vector<int> shape,
+                         bool requires_grad)
+                      { return Tensor(data, shape, requires_grad); }),
+             py::arg("data"),
+             py::arg("shape"),
+             py::arg("requires_grad") = false)
 
         .def("cpu", &Tensor::cpu)
         .def("shape", &Tensor::get_shape)
         .def("ndim", &Tensor::ndim)
         .def("numel", &Tensor::numel)
+
+        .def("grad", &Tensor::grad)
+        .def("zero_grad", &Tensor::zero_grad)
 
         .def("__add__", &Tensor::operator+)
         .def("__mul__", &Tensor::operator*)
@@ -191,7 +195,13 @@ PYBIND11_MODULE(_C, m)
                  }
                  else
                  {
-                     oss << format_tensor_recursive(data, shape, stride, 0, 0, 0);
+                     oss << format_tensor_recursive(
+                         data,
+                         shape,
+                         stride,
+                         0,
+                         0,
+                         0);
                  }
 
                  oss << ", shape=[";
