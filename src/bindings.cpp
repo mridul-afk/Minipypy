@@ -164,6 +164,7 @@ PYBIND11_MODULE(_C, m)
 
         .def("grad", &Tensor::grad)
         .def("zero_grad", &Tensor::zero_grad)
+        .def("backward", &Tensor::backward)
 
         .def("__add__", &Tensor::operator+)
         .def("__mul__", &Tensor::operator*)

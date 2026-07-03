@@ -3,6 +3,8 @@
 #include <vector>
 #include <memory>
 
+#include "autograd.h"
+
 class Tensor
 {
 public:
@@ -14,7 +16,9 @@ public:
 
    bool is_cuda;
    bool requires_grad;
+
    Tensor *grad_tensor;
+   std::shared_ptr<AutogradNode> grad_fn;
 
    Tensor(int size, bool requires_grad = false);
    Tensor(const std::vector<float> &host_data, bool requires_grad = false);
@@ -43,6 +47,7 @@ public:
    int ndim() const;
    int numel() const;
    std::vector<int> get_stride() const;
+
    Tensor matmul(const Tensor &other) const;
    Tensor reshape(std::vector<int> new_shape) const;
    Tensor flatten() const;
@@ -51,6 +56,8 @@ public:
    Tensor mean() const;
    Tensor max() const;
 
+   // AUTOGRAD
    Tensor grad() const;
    void zero_grad();
+   void backward();
 };

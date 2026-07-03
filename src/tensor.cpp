@@ -1,5 +1,6 @@
 #include "tensor.h"
 #include "memory_pool.h"
+#include "autograd.h"
 
 #include <cuda_runtime.h>
 #include <stdexcept>
@@ -230,6 +231,7 @@ Tensor::Tensor(int size, bool requires_grad)
   this->d_data = nullptr;
   this->requires_grad = requires_grad;
   this->grad_tensor = nullptr;
+  this->grad_fn = nullptr;
 
   d_data = static_cast<float *>(
       CudaMemoryPool::instance().allocate(size * sizeof(float)));
@@ -244,6 +246,7 @@ Tensor::Tensor(const std::vector<float> &host_data, bool requires_grad)
   this->d_data = nullptr;
   this->requires_grad = requires_grad;
   this->grad_tensor = nullptr;
+  this->grad_fn = nullptr;
 
   d_data = static_cast<float *>(
       CudaMemoryPool::instance().allocate(size * sizeof(float)));
@@ -263,6 +266,7 @@ Tensor::Tensor(std::vector<int> shape, bool requires_grad)
   this->d_data = nullptr;
   this->requires_grad = requires_grad;
   this->grad_tensor = nullptr;
+  this->grad_fn = nullptr;
 
   for (int dim : shape)
     this->size *= dim;
@@ -291,6 +295,7 @@ Tensor::Tensor(
   this->d_data = nullptr;
   this->requires_grad = requires_grad;
   this->grad_tensor = nullptr;
+  this->grad_fn = nullptr;
 
   for (int dim : shape)
     this->size *= dim;
@@ -326,6 +331,7 @@ Tensor::Tensor(Tensor &&other) noexcept
   this->is_cuda = other.is_cuda;
   this->requires_grad = other.requires_grad;
   this->grad_tensor = other.grad_tensor;
+  this->grad_fn = std::move(other.grad_fn);
 
   other.d_data = nullptr;
   other.grad_tensor = nullptr;
@@ -356,6 +362,7 @@ Tensor &Tensor::operator=(Tensor &&other) noexcept
     this->is_cuda = other.is_cuda;
     this->requires_grad = other.requires_grad;
     this->grad_tensor = other.grad_tensor;
+    this->grad_fn = std::move(other.grad_fn);
 
     other.d_data = nullptr;
     other.grad_tensor = nullptr;
@@ -476,6 +483,15 @@ Tensor Tensor::operator*(const Tensor &other) const
   if (shape == other.shape)
   {
     launch_mul(d_data, other.d_data, out.d_data, size);
+
+    if (out.requires_grad)
+    {
+      out.grad_fn = std::make_shared<AutogradNode>(
+          OpType::MUL,
+          std::vector<Tensor *>{const_cast<Tensor *>(this),
+                                const_cast<Tensor *>(&other)});
+    }
+
     return out;
   }
 
@@ -504,6 +520,14 @@ Tensor Tensor::operator*(const Tensor &other) const
   free_device_int_vector(d_b_shape, other.shape);
   free_device_int_vector(d_b_stride, other.stride);
   free_device_int_vector(d_out_shape, out_shape);
+
+  if (out.requires_grad)
+  {
+    out.grad_fn = std::make_shared<AutogradNode>(
+        OpType::MUL,
+        std::vector<Tensor *>{const_cast<Tensor *>(this),
+                              const_cast<Tensor *>(&other)});
+  }
 
   return out;
 }
@@ -682,6 +706,13 @@ Tensor Tensor::sum() const
   Tensor out(std::vector<int>{1}, requires_grad);
 
   launch_sum(d_data, out.d_data, size);
+
+  if (out.requires_grad)
+  {
+    out.grad_fn = std::make_shared<AutogradNode>(
+        OpType::SUM,
+        std::vector<Tensor *>{const_cast<Tensor *>(this)});
+  }
 
   return out;
 }
