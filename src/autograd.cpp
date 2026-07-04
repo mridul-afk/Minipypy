@@ -3,6 +3,8 @@
 
 #include <stdexcept>
 #include <vector>
+#include <unordered_set>
+#include <algorithm>
 
 Tensor Tensor::grad() const
 {
@@ -26,56 +28,90 @@ void Tensor::zero_grad()
   launch_fill(grad_tensor->d_data, 0.0f, grad_tensor->size);
 }
 
+void build_topo(
+    Tensor *tensor,
+    std::unordered_set<Tensor *> &visited,
+    std::vector<Tensor *> &topo)
+{
+  if (!tensor)
+    return;
+
+  if (visited.count(tensor))
+    return;
+
+  visited.insert(tensor);
+
+  if (tensor->grad_fn)
+  {
+    for (Tensor *parent : tensor->grad_fn->parents)
+    {
+      build_topo(parent, visited, topo);
+    }
+  }
+
+  topo.push_back(tensor);
+}
+
 void Tensor::backward()
 {
   if (!requires_grad)
     throw std::runtime_error("cannot call backward on tensor that does not require grad");
 
-  // Seed output gradient with 1
-  zero_grad();
+  std::unordered_set<Tensor *> visited;
+  std::vector<Tensor *> topo;
+
+  build_topo(this, visited, topo);
+
+  for (Tensor *tensor : topo)
+  {
+    if (tensor && tensor->requires_grad)
+      tensor->zero_grad();
+  }
+
   launch_fill(grad_tensor->d_data, 1.0f, grad_tensor->size);
 
-  if (grad_fn && grad_fn->op == OpType::MUL)
+  std::reverse(topo.begin(), topo.end());
+
+  for (Tensor *tensor : topo)
   {
-    Tensor *a = grad_fn->parents[0];
-    Tensor *b = grad_fn->parents[1];
+    if (!tensor || !tensor->grad_fn)
+      continue;
 
-    if (a && a->requires_grad)
-      a->zero_grad();
-
-    if (b && b->requires_grad && b != a)
-      b->zero_grad();
-
-    if (a && a->requires_grad)
+    if (tensor->grad_fn->op == OpType::SUM)
     {
-      launch_mul_backward(
-          grad_tensor->d_data,
-          b->d_data,
-          a->grad_tensor->d_data,
-          a->size);
+      Tensor *a = tensor->grad_fn->parents[0];
+
+      if (a && a->requires_grad)
+      {
+        launch_sum_backward(
+            tensor->grad_tensor->d_data,
+            a->grad_tensor->d_data,
+            a->size);
+      }
     }
 
-    if (b && b->requires_grad)
+    else if (tensor->grad_fn->op == OpType::MUL)
     {
-      launch_mul_backward(
-          grad_tensor->d_data,
-          a->d_data,
-          b->grad_tensor->d_data,
-          b->size);
-    }
-  }
-  else if (grad_fn && grad_fn->op == OpType::SUM)
-  {
-    Tensor *a = grad_fn->parents[0];
+      Tensor *a = tensor->grad_fn->parents[0];
+      Tensor *b = tensor->grad_fn->parents[1];
 
-    if (a && a->requires_grad)
-    {
-      a->zero_grad();
+      if (a && a->requires_grad)
+      {
+        launch_mul_backward(
+            tensor->grad_tensor->d_data,
+            b->d_data,
+            a->grad_tensor->d_data,
+            a->size);
+      }
 
-      launch_sum_backward(
-          grad_tensor->d_data,
-          a->grad_tensor->d_data,
-          a->size);
+      if (b && b->requires_grad)
+      {
+        launch_mul_backward(
+            tensor->grad_tensor->d_data,
+            a->d_data,
+            b->grad_tensor->d_data,
+            b->size);
+      }
     }
   }
 }

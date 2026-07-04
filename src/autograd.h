@@ -2,6 +2,7 @@
 
 #include <string>
 #include <vector>
+#include <memory>
 
 class Tensor;
 
@@ -16,6 +17,9 @@ struct AutogradNode
 {
   OpType op;
   std::vector<Tensor *> parents;
+
+  // Own intermediate tensors so temporaries like (x*x) survive.
+  std::vector<std::shared_ptr<Tensor>> saved_tensors;
 
   AutogradNode()
       : op(OpType::NONE) {}

@@ -709,9 +709,27 @@ Tensor Tensor::sum() const
 
   if (out.requires_grad)
   {
-    out.grad_fn = std::make_shared<AutogradNode>(
-        OpType::SUM,
-        std::vector<Tensor *>{const_cast<Tensor *>(this)});
+    out.grad_fn = std::make_shared<AutogradNode>();
+    out.grad_fn->op = OpType::SUM;
+
+    // If this tensor is an intermediate, save an owned copy
+    // so expressions like (x*x).sum() do not point to a destroyed temporary.
+    if (this->grad_fn)
+    {
+      Tensor saved(this->cpu(), this->shape, this->requires_grad);
+      saved.grad_fn = this->grad_fn;
+
+      out.grad_fn->saved_tensors.push_back(
+          std::make_shared<Tensor>(std::move(saved)));
+
+      out.grad_fn->parents.push_back(
+          out.grad_fn->saved_tensors[0].get());
+    }
+    else
+    {
+      // Leaf tensor: safe to point directly to the user-owned tensor.
+      out.grad_fn->parents.push_back(const_cast<Tensor *>(this));
+    }
   }
 
   return out;
