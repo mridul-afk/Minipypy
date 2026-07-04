@@ -198,3 +198,28 @@ void launch_div_backward_right(
       grad_b,
       size);
 }
+
+__global__ void mean_backward_kernel(
+    const float *grad_out,
+    float *grad_in,
+    int size)
+{
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+  if (idx < size)
+    grad_in[idx] += grad_out[0] / size;
+}
+
+void launch_mean_backward(
+    const float *grad_out,
+    float *grad_in,
+    int size)
+{
+  int threads = 256;
+  int blocks = (size + threads - 1) / threads;
+
+  mean_backward_kernel<<<blocks, threads>>>(
+      grad_out,
+      grad_in,
+      size);
+}

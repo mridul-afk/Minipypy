@@ -778,6 +778,30 @@ Tensor Tensor::mean() const
       out.d_data,
       static_cast<float>(size));
 
+  if (out.requires_grad)
+  {
+    out.grad_fn = std::make_shared<AutogradNode>();
+
+    out.grad_fn->op = OpType::MEAN;
+
+    if (this->grad_fn)
+    {
+      Tensor saved(this->cpu(), shape, requires_grad);
+      saved.grad_fn = this->grad_fn;
+
+      out.grad_fn->saved_tensors.push_back(
+          std::make_shared<Tensor>(std::move(saved)));
+
+      out.grad_fn->parents.push_back(
+          out.grad_fn->saved_tensors[0].get());
+    }
+    else
+    {
+      out.grad_fn->parents.push_back(
+          const_cast<Tensor *>(this));
+    }
+  }
+
   return out;
 }
 

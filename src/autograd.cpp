@@ -179,5 +179,17 @@ void Tensor::backward()
             b->size);
       }
     }
+    else if (tensor->grad_fn->op == OpType::MEAN)
+    {
+      Tensor *a = tensor->grad_fn->parents[0];
+
+      if (a && a->requires_grad)
+      {
+        launch_mean_backward(
+            tensor->grad_tensor->d_data,
+            a->grad_tensor->d_data,
+            a->size);
+      }
+    }
   }
 }

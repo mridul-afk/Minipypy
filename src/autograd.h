@@ -13,7 +13,8 @@ enum class OpType
   SUM,
   ADD,
   SUB,
-  DIV
+  DIV,
+  MEAN
 };
 
 struct AutogradNode
@@ -70,4 +71,9 @@ void launch_div_backward_right(
     const float *a,
     const float *b,
     float *grad_b,
+    int size);
+
+void launch_mean_backward(
+    const float *grad_out,
+    float *grad_in,
     int size);
