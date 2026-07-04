@@ -181,6 +181,7 @@ PYBIND11_MODULE(_C, m)
         .def("mean", &Tensor::mean)
         .def("max", &Tensor::max)
         .def("sum_to_shape", &Tensor::sum_to_shape)
+        .def("clone", &Tensor::clone)
 
         .def("__repr__", [](const Tensor &t)
              {

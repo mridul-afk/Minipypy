@@ -603,13 +603,9 @@ Tensor Tensor::operator/(const Tensor &other) const
   int *d_out_shape = copy_int_vector_to_device(out_shape);
 
   launch_div_broadcast(
-      d_data,
-      other.d_data,
-      out.d_data,
-      d_a_shape,
-      d_a_stride,
-      d_b_shape,
-      d_b_stride,
+      d_data, other.d_data, out.d_data,
+      d_a_shape, d_a_stride,
+      d_b_shape, d_b_stride,
       d_out_shape,
       static_cast<int>(shape.size()),
       static_cast<int>(other.shape.size()),
@@ -621,6 +617,14 @@ Tensor Tensor::operator/(const Tensor &other) const
   free_device_int_vector(d_b_shape, other.shape);
   free_device_int_vector(d_b_stride, other.stride);
   free_device_int_vector(d_out_shape, out_shape);
+
+  if (out.requires_grad)
+  {
+    out.grad_fn = std::make_shared<AutogradNode>(
+        OpType::DIV,
+        std::vector<Tensor *>{const_cast<Tensor *>(this),
+                              const_cast<Tensor *>(&other)});
+  }
 
   return out;
 }
@@ -908,6 +912,15 @@ Tensor Tensor::sum_to_shape(std::vector<int> target_shape) const
   free_device_int_vector(d_in_shape, shape);
   free_device_int_vector(d_out_shape, target_shape);
   free_device_int_vector(d_out_stride, out_stride);
+
+  return out;
+}
+
+Tensor Tensor::clone() const
+{
+  std::vector<float> host = cpu();
+
+  Tensor out(host, shape, requires_grad);
 
   return out;
 }

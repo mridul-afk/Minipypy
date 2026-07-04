@@ -57,6 +57,7 @@ public:
    Tensor sum() const;
    Tensor mean() const;
    Tensor max() const;
+   Tensor clone() const;
 
    // AUTOGRAD
    Tensor grad() const;

@@ -110,3 +110,53 @@ def test_broadcasted_matmul_backward_B_broadcast():
 
     assert B.grad().cpu() == [44.0, 44.0,
                               66.0, 66.0]
+
+def test_add_broadcast_backward():
+    x = mini.Tensor([[1.0, 2.0, 3.0]], requires_grad=True)
+    y = mini.Tensor([[10.0], [20.0]], requires_grad=True)
+
+    z = (x + y).sum()
+    z.backward()
+
+    assert x.grad().cpu() == [2.0, 2.0, 2.0]
+    assert y.grad().cpu() == [3.0, 3.0]
+
+
+def test_sub_broadcast_backward():
+    x = mini.Tensor([[1.0, 2.0, 3.0]], requires_grad=True)
+    y = mini.Tensor([[10.0], [20.0]], requires_grad=True)
+
+    z = (x - y).sum()
+    z.backward()
+
+    assert x.grad().cpu() == [2.0, 2.0, 2.0]
+    assert y.grad().cpu() == [-3.0, -3.0]
+
+
+def test_mul_broadcast_backward():
+    x = mini.Tensor([[1.0, 2.0, 3.0]], requires_grad=True)
+    y = mini.Tensor([[10.0], [20.0]], requires_grad=True)
+
+    z = (x * y).sum()
+    z.backward()
+
+    assert x.grad().cpu() == [30.0, 30.0, 30.0]
+    assert y.grad().cpu() == [6.0, 6.0]
+
+
+def test_div_broadcast_backward():
+    x = mini.Tensor([[10.0, 20.0, 30.0]], requires_grad=True)
+    y = mini.Tensor([[10.0], [20.0]], requires_grad=True)
+
+    z = (x / y).sum()
+    z.backward()
+
+    gx = x.grad().cpu()
+    gy = y.grad().cpu()
+
+    assert abs(gx[0] - 0.15) < 1e-5
+    assert abs(gx[1] - 0.15) < 1e-5
+    assert abs(gx[2] - 0.15) < 1e-5
+
+    assert abs(gy[0] - (-0.6)) < 1e-5
+    assert abs(gy[1] - (-0.15)) < 1e-5

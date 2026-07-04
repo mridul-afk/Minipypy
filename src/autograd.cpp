@@ -90,95 +90,6 @@ void Tensor::backward()
       }
     }
 
-    else if (tensor->grad_fn->op == OpType::MUL)
-    {
-      Tensor *a = tensor->grad_fn->parents[0];
-      Tensor *b = tensor->grad_fn->parents[1];
-
-      if (a && a->requires_grad)
-      {
-        launch_mul_backward(
-            tensor->grad_tensor->d_data,
-            b->d_data,
-            a->grad_tensor->d_data,
-            a->size);
-      }
-
-      if (b && b->requires_grad)
-      {
-        launch_mul_backward(
-            tensor->grad_tensor->d_data,
-            a->d_data,
-            b->grad_tensor->d_data,
-            b->size);
-      }
-    }
-    else if (tensor->grad_fn->op == OpType::ADD)
-    {
-      Tensor *a = tensor->grad_fn->parents[0];
-      Tensor *b = tensor->grad_fn->parents[1];
-
-      if (a && a->requires_grad)
-      {
-        launch_add_backward(
-            tensor->grad_tensor->d_data,
-            a->grad_tensor->d_data,
-            a->size);
-      }
-
-      if (b && b->requires_grad)
-      {
-        launch_add_backward(
-            tensor->grad_tensor->d_data,
-            b->grad_tensor->d_data,
-            b->size);
-      }
-    }
-    else if (tensor->grad_fn->op == OpType::SUB)
-    {
-      Tensor *a = tensor->grad_fn->parents[0];
-      Tensor *b = tensor->grad_fn->parents[1];
-
-      if (a && a->requires_grad)
-      {
-        launch_sub_backward_left(
-            tensor->grad_tensor->d_data,
-            a->grad_tensor->d_data,
-            a->size);
-      }
-
-      if (b && b->requires_grad)
-      {
-        launch_sub_backward_right(
-            tensor->grad_tensor->d_data,
-            b->grad_tensor->d_data,
-            b->size);
-      }
-    }
-    else if (tensor->grad_fn->op == OpType::DIV)
-    {
-      Tensor *a = tensor->grad_fn->parents[0];
-      Tensor *b = tensor->grad_fn->parents[1];
-
-      if (a && a->requires_grad)
-      {
-        launch_div_backward_left(
-            tensor->grad_tensor->d_data,
-            b->d_data,
-            a->grad_tensor->d_data,
-            a->size);
-      }
-
-      if (b && b->requires_grad)
-      {
-        launch_div_backward_right(
-            tensor->grad_tensor->d_data,
-            a->d_data,
-            b->d_data,
-            b->grad_tensor->d_data,
-            b->size);
-      }
-    }
     else if (tensor->grad_fn->op == OpType::MEAN)
     {
       Tensor *a = tensor->grad_fn->parents[0];
@@ -189,6 +100,151 @@ void Tensor::backward()
             tensor->grad_tensor->d_data,
             a->grad_tensor->d_data,
             a->size);
+      }
+    }
+
+    else if (tensor->grad_fn->op == OpType::ADD)
+    {
+      Tensor *a = tensor->grad_fn->parents[0];
+      Tensor *b = tensor->grad_fn->parents[1];
+
+      if (a && a->requires_grad)
+      {
+        Tensor grad_a = tensor->grad_tensor->clone();
+
+        if (grad_a.shape != a->shape)
+        {
+          grad_a = grad_a.sum_to_shape(a->shape);
+        }
+
+        launch_add_backward(
+            grad_a.d_data,
+            a->grad_tensor->d_data,
+            a->size);
+      }
+
+      if (b && b->requires_grad)
+      {
+        Tensor grad_b = tensor->grad_tensor->clone();
+
+        if (grad_b.shape != b->shape)
+        {
+          grad_b = grad_b.sum_to_shape(b->shape);
+        }
+
+        launch_add_backward(
+            grad_b.d_data,
+            b->grad_tensor->d_data,
+            b->size);
+      }
+    }
+
+    else if (tensor->grad_fn->op == OpType::SUB)
+    {
+      Tensor *a = tensor->grad_fn->parents[0];
+      Tensor *b = tensor->grad_fn->parents[1];
+
+      if (a && a->requires_grad)
+      {
+        Tensor grad_a = tensor->grad_tensor->clone();
+
+        if (grad_a.shape != a->shape)
+        {
+          grad_a = grad_a.sum_to_shape(a->shape);
+        }
+
+        launch_sub_backward_left(
+            grad_a.d_data,
+            a->grad_tensor->d_data,
+            a->size);
+      }
+
+      if (b && b->requires_grad)
+      {
+        Tensor grad_b = tensor->grad_tensor->clone();
+
+        if (grad_b.shape != b->shape)
+        {
+          grad_b = grad_b.sum_to_shape(b->shape);
+        }
+
+        launch_sub_backward_right(
+            grad_b.d_data,
+            b->grad_tensor->d_data,
+            b->size);
+      }
+    }
+
+    else if (tensor->grad_fn->op == OpType::MUL)
+    {
+      Tensor *a = tensor->grad_fn->parents[0];
+      Tensor *b = tensor->grad_fn->parents[1];
+
+      if (a && a->requires_grad)
+      {
+        Tensor grad_a = tensor->grad_tensor->clone() * (*b);
+
+        if (grad_a.shape != a->shape)
+        {
+          grad_a = grad_a.sum_to_shape(a->shape);
+        }
+
+        launch_add_backward(
+            grad_a.d_data,
+            a->grad_tensor->d_data,
+            a->size);
+      }
+
+      if (b && b->requires_grad)
+      {
+        Tensor grad_b = tensor->grad_tensor->clone() * (*a);
+
+        if (grad_b.shape != b->shape)
+        {
+          grad_b = grad_b.sum_to_shape(b->shape);
+        }
+
+        launch_add_backward(
+            grad_b.d_data,
+            b->grad_tensor->d_data,
+            b->size);
+      }
+    }
+
+    else if (tensor->grad_fn->op == OpType::DIV)
+    {
+      Tensor *a = tensor->grad_fn->parents[0];
+      Tensor *b = tensor->grad_fn->parents[1];
+
+      if (a && a->requires_grad)
+      {
+        Tensor grad_a = tensor->grad_tensor->clone() / (*b);
+
+        if (grad_a.shape != a->shape)
+        {
+          grad_a = grad_a.sum_to_shape(a->shape);
+        }
+
+        launch_add_backward(
+            grad_a.d_data,
+            a->grad_tensor->d_data,
+            a->size);
+      }
+
+      if (b && b->requires_grad)
+      {
+        Tensor grad_b = (tensor->grad_tensor->clone() * (*a)) / ((*b) * (*b));
+
+        if (grad_b.shape != b->shape)
+        {
+          grad_b = grad_b.sum_to_shape(b->shape);
+        }
+
+        // Because d(a / b) / db = -a / b^2
+        launch_sub_backward_right(
+            grad_b.d_data,
+            b->grad_tensor->d_data,
+            b->size);
       }
     }
 
