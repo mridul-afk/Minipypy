@@ -155,5 +155,29 @@ void Tensor::backward()
             b->size);
       }
     }
+    else if (tensor->grad_fn->op == OpType::DIV)
+    {
+      Tensor *a = tensor->grad_fn->parents[0];
+      Tensor *b = tensor->grad_fn->parents[1];
+
+      if (a && a->requires_grad)
+      {
+        launch_div_backward_left(
+            tensor->grad_tensor->d_data,
+            b->d_data,
+            a->grad_tensor->d_data,
+            a->size);
+      }
+
+      if (b && b->requires_grad)
+      {
+        launch_div_backward_right(
+            tensor->grad_tensor->d_data,
+            a->d_data,
+            b->d_data,
+            b->grad_tensor->d_data,
+            b->size);
+      }
+    }
   }
 }

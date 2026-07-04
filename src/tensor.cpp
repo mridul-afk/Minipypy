@@ -566,6 +566,15 @@ Tensor Tensor::operator/(const Tensor &other) const
   if (shape == other.shape)
   {
     launch_div(d_data, other.d_data, out.d_data, size);
+
+    if (out.requires_grad)
+    {
+      out.grad_fn = std::make_shared<AutogradNode>(
+          OpType::DIV,
+          std::vector<Tensor *>{const_cast<Tensor *>(this),
+                                const_cast<Tensor *>(&other)});
+    }
+
     return out;
   }
 

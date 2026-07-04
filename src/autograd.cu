@@ -139,3 +139,62 @@ void launch_sub_backward_right(
       grad_in,
       size);
 }
+
+__global__ void div_backward_left_kernel(
+    const float *grad_out,
+    const float *b,
+    float *grad_a,
+    int size)
+{
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+  if (idx < size)
+    grad_a[idx] += grad_out[idx] / b[idx];
+}
+
+void launch_div_backward_left(
+    const float *grad_out,
+    const float *b,
+    float *grad_a,
+    int size)
+{
+  int threads = 256;
+  int blocks = (size + threads - 1) / threads;
+
+  div_backward_left_kernel<<<blocks, threads>>>(
+      grad_out,
+      b,
+      grad_a,
+      size);
+}
+
+__global__ void div_backward_right_kernel(
+    const float *grad_out,
+    const float *a,
+    const float *b,
+    float *grad_b,
+    int size)
+{
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+  if (idx < size)
+    grad_b[idx] += -grad_out[idx] * a[idx] / (b[idx] * b[idx]);
+}
+
+void launch_div_backward_right(
+    const float *grad_out,
+    const float *a,
+    const float *b,
+    float *grad_b,
+    int size)
+{
+  int threads = 256;
+  int blocks = (size + threads - 1) / threads;
+
+  div_backward_right_kernel<<<blocks, threads>>>(
+      grad_out,
+      a,
+      b,
+      grad_b,
+      size);
+}

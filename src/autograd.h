@@ -12,7 +12,8 @@ enum class OpType
   MUL,
   SUM,
   ADD,
-  SUB
+  SUB,
+  DIV
 };
 
 struct AutogradNode
@@ -56,4 +57,17 @@ void launch_sub_backward_left(
 void launch_sub_backward_right(
     const float *grad_out,
     float *grad_in,
+    int size);
+
+void launch_div_backward_left(
+    const float *grad_out,
+    const float *b,
+    float *grad_a,
+    int size);
+
+void launch_div_backward_right(
+    const float *grad_out,
+    const float *a,
+    const float *b,
+    float *grad_b,
     int size);
