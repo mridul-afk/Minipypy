@@ -113,5 +113,47 @@ void Tensor::backward()
             b->size);
       }
     }
+    else if (tensor->grad_fn->op == OpType::ADD)
+    {
+      Tensor *a = tensor->grad_fn->parents[0];
+      Tensor *b = tensor->grad_fn->parents[1];
+
+      if (a && a->requires_grad)
+      {
+        launch_add_backward(
+            tensor->grad_tensor->d_data,
+            a->grad_tensor->d_data,
+            a->size);
+      }
+
+      if (b && b->requires_grad)
+      {
+        launch_add_backward(
+            tensor->grad_tensor->d_data,
+            b->grad_tensor->d_data,
+            b->size);
+      }
+    }
+    else if (tensor->grad_fn->op == OpType::SUB)
+    {
+      Tensor *a = tensor->grad_fn->parents[0];
+      Tensor *b = tensor->grad_fn->parents[1];
+
+      if (a && a->requires_grad)
+      {
+        launch_sub_backward_left(
+            tensor->grad_tensor->d_data,
+            a->grad_tensor->d_data,
+            a->size);
+      }
+
+      if (b && b->requires_grad)
+      {
+        launch_sub_backward_right(
+            tensor->grad_tensor->d_data,
+            b->grad_tensor->d_data,
+            b->size);
+      }
+    }
   }
 }

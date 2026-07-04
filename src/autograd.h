@@ -10,7 +10,9 @@ enum class OpType
 {
   NONE,
   MUL,
-  SUM
+  SUM,
+  ADD,
+  SUB
 };
 
 struct AutogradNode
@@ -37,6 +39,21 @@ void launch_mul_backward(
     int size);
 
 void launch_sum_backward(
+    const float *grad_out,
+    float *grad_in,
+    int size);
+
+void launch_add_backward(
+    const float *grad_out,
+    float *grad_in,
+    int size);
+
+void launch_sub_backward_left(
+    const float *grad_out,
+    float *grad_in,
+    int size);
+
+void launch_sub_backward_right(
     const float *grad_out,
     float *grad_in,
     int size);

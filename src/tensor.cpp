@@ -403,6 +403,15 @@ Tensor Tensor::operator+(const Tensor &other) const
   if (shape == other.shape)
   {
     launch_add(d_data, other.d_data, out.d_data, size);
+
+    if (out.requires_grad)
+    {
+      out.grad_fn = std::make_shared<AutogradNode>(
+          OpType::ADD,
+          std::vector<Tensor *>{const_cast<Tensor *>(this),
+                                const_cast<Tensor *>(&other)});
+    }
+
     return out;
   }
 
@@ -413,13 +422,9 @@ Tensor Tensor::operator+(const Tensor &other) const
   int *d_out_shape = copy_int_vector_to_device(out_shape);
 
   launch_add_broadcast(
-      d_data,
-      other.d_data,
-      out.d_data,
-      d_a_shape,
-      d_a_stride,
-      d_b_shape,
-      d_b_stride,
+      d_data, other.d_data, out.d_data,
+      d_a_shape, d_a_stride,
+      d_b_shape, d_b_stride,
       d_out_shape,
       static_cast<int>(shape.size()),
       static_cast<int>(other.shape.size()),
@@ -431,6 +436,14 @@ Tensor Tensor::operator+(const Tensor &other) const
   free_device_int_vector(d_b_shape, other.shape);
   free_device_int_vector(d_b_stride, other.stride);
   free_device_int_vector(d_out_shape, out_shape);
+
+  if (out.requires_grad)
+  {
+    out.grad_fn = std::make_shared<AutogradNode>(
+        OpType::ADD,
+        std::vector<Tensor *>{const_cast<Tensor *>(this),
+                              const_cast<Tensor *>(&other)});
+  }
 
   return out;
 }
@@ -443,6 +456,15 @@ Tensor Tensor::operator-(const Tensor &other) const
   if (shape == other.shape)
   {
     launch_sub(d_data, other.d_data, out.d_data, size);
+
+    if (out.requires_grad)
+    {
+      out.grad_fn = std::make_shared<AutogradNode>(
+          OpType::SUB,
+          std::vector<Tensor *>{const_cast<Tensor *>(this),
+                                const_cast<Tensor *>(&other)});
+    }
+
     return out;
   }
 
@@ -453,13 +475,9 @@ Tensor Tensor::operator-(const Tensor &other) const
   int *d_out_shape = copy_int_vector_to_device(out_shape);
 
   launch_sub_broadcast(
-      d_data,
-      other.d_data,
-      out.d_data,
-      d_a_shape,
-      d_a_stride,
-      d_b_shape,
-      d_b_stride,
+      d_data, other.d_data, out.d_data,
+      d_a_shape, d_a_stride,
+      d_b_shape, d_b_stride,
       d_out_shape,
       static_cast<int>(shape.size()),
       static_cast<int>(other.shape.size()),
@@ -471,6 +489,14 @@ Tensor Tensor::operator-(const Tensor &other) const
   free_device_int_vector(d_b_shape, other.shape);
   free_device_int_vector(d_b_stride, other.stride);
   free_device_int_vector(d_out_shape, out_shape);
+
+  if (out.requires_grad)
+  {
+    out.grad_fn = std::make_shared<AutogradNode>(
+        OpType::SUB,
+        std::vector<Tensor *>{const_cast<Tensor *>(this),
+                              const_cast<Tensor *>(&other)});
+  }
 
   return out;
 }
