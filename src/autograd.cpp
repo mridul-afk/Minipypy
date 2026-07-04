@@ -191,5 +191,35 @@ void Tensor::backward()
             a->size);
       }
     }
+    else if (tensor->grad_fn->op == OpType::MATMUL)
+    {
+      Tensor *a = tensor->grad_fn->parents[0];
+      Tensor *b = tensor->grad_fn->parents[1];
+
+      if (a->shape.size() != 2 || b->shape.size() != 2)
+        throw std::runtime_error("matmul backward currently supports only 2D tensors");
+
+      if (a && a->requires_grad)
+      {
+        Tensor b_T = b->transpose();
+        Tensor grad_a = tensor->grad_tensor->matmul(b_T);
+
+        launch_add_backward(
+            grad_a.d_data,
+            a->grad_tensor->d_data,
+            a->size);
+      }
+
+      if (b && b->requires_grad)
+      {
+        Tensor a_T = a->transpose();
+        Tensor grad_b = a_T.matmul(*tensor->grad_tensor);
+
+        launch_add_backward(
+            grad_b.d_data,
+            b->grad_tensor->d_data,
+            b->size);
+      }
+    }
   }
 }

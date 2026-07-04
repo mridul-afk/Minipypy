@@ -14,7 +14,8 @@ enum class OpType
   ADD,
   SUB,
   DIV,
-  MEAN
+  MEAN,
+  MATMUL
 };
 
 struct AutogradNode

@@ -671,6 +671,13 @@ Tensor Tensor::matmul(const Tensor &other) const
     free_device_int_vector(d_b_batch_stride, b_batch_stride);
     free_device_int_vector(d_out_batch_shape, out_batch);
   }
+  if (out.requires_grad)
+  {
+    out.grad_fn = std::make_shared<AutogradNode>(
+        OpType::MATMUL,
+        std::vector<Tensor *>{const_cast<Tensor *>(this),
+                              const_cast<Tensor *>(&other)});
+  }
 
   return out;
 }
