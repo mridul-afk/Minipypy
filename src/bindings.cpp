@@ -176,9 +176,11 @@ PYBIND11_MODULE(_C, m)
         .def("reshape", &Tensor::reshape)
         .def("flatten", &Tensor::flatten)
         .def("transpose", &Tensor::transpose)
+        .def("transpose_last_two_dims", &Tensor::transpose_last_two_dims)
         .def("sum", &Tensor::sum)
         .def("mean", &Tensor::mean)
         .def("max", &Tensor::max)
+        .def("sum_to_shape", &Tensor::sum_to_shape)
 
         .def("__repr__", [](const Tensor &t)
              {

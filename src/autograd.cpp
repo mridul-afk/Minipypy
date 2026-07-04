@@ -191,18 +191,25 @@ void Tensor::backward()
             a->size);
       }
     }
+
     else if (tensor->grad_fn->op == OpType::MATMUL)
     {
       Tensor *a = tensor->grad_fn->parents[0];
       Tensor *b = tensor->grad_fn->parents[1];
 
-      if (a->shape.size() != 2 || b->shape.size() != 2)
-        throw std::runtime_error("matmul backward currently supports only 2D tensors");
+      if (a->shape.size() < 2 || b->shape.size() < 2)
+        throw std::runtime_error("matmul backward requires tensors with at least 2 dimensions");
 
       if (a && a->requires_grad)
       {
-        Tensor b_T = b->transpose();
+        Tensor b_T = b->transpose_last_two_dims();
+
         Tensor grad_a = tensor->grad_tensor->matmul(b_T);
+
+        if (grad_a.shape != a->shape)
+        {
+          grad_a = grad_a.sum_to_shape(a->shape);
+        }
 
         launch_add_backward(
             grad_a.d_data,
@@ -212,8 +219,14 @@ void Tensor::backward()
 
       if (b && b->requires_grad)
       {
-        Tensor a_T = a->transpose();
+        Tensor a_T = a->transpose_last_two_dims();
+
         Tensor grad_b = a_T.matmul(*tensor->grad_tensor);
+
+        if (grad_b.shape != b->shape)
+        {
+          grad_b = grad_b.sum_to_shape(b->shape);
+        }
 
         launch_add_backward(
             grad_b.d_data,

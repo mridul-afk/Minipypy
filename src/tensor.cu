@@ -458,6 +458,104 @@ __global__ void broadcasted_batched_matmul_kernel(
     C_batch[row * N + col] = sum;
 }
 
+__global__ void transpose_last_two_dims_kernel(
+    const float *input,
+    float *output,
+    const int *in_shape,
+    const int *out_shape,
+    int ndim,
+    int total_size)
+{
+  int out_idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+  if (out_idx >= total_size)
+    return;
+
+  int remaining = out_idx;
+
+  int in_idx = 0;
+
+  // We decode output index -> output coordinates.
+  // Then map output coordinates to input coordinates,
+  // swapping only the last two dimensions.
+  for (int d = ndim - 1; d >= 0; --d)
+  {
+    int coord = remaining % out_shape[d];
+    remaining /= out_shape[d];
+
+    int in_dim;
+
+    if (d == ndim - 1)
+    {
+      // output last dim corresponds to input second-last dim
+      in_dim = ndim - 2;
+    }
+    else if (d == ndim - 2)
+    {
+      // output second-last dim corresponds to input last dim
+      in_dim = ndim - 1;
+    }
+    else
+    {
+      // batch dims stay the same
+      in_dim = d;
+    }
+
+    int input_stride = 1;
+    for (int s = in_dim + 1; s < ndim; ++s)
+      input_stride *= in_shape[s];
+
+    in_idx += coord * input_stride;
+  }
+
+  output[out_idx] = input[in_idx];
+}
+
+__global__ void sum_to_shape_kernel(
+    const float *input,
+    float *output,
+    const int *in_shape,
+    const int *out_shape,
+    const int *out_stride,
+    int in_ndim,
+    int out_ndim,
+    int input_size)
+{
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+  if (idx >= input_size)
+    return;
+
+  int remaining = idx;
+  int out_idx = 0;
+
+  int offset = in_ndim - out_ndim;
+
+  // Decode input index into coordinates from right to left.
+  for (int d = in_ndim - 1; d >= 0; --d)
+  {
+    int coord = remaining % in_shape[d];
+    remaining /= in_shape[d];
+
+    int out_d = d - offset;
+
+    // Extra leading input dimensions are reduced away.
+    if (out_d < 0)
+      continue;
+
+    // If output dim is 1, this input dim was broadcast.
+    // So all input coords map to output coord 0.
+    int out_coord = 0;
+
+    if (out_shape[out_d] != 1)
+      out_coord = coord;
+
+    out_idx += out_coord * out_stride[out_d];
+  }
+
+  atomicAdd(&output[out_idx], input[idx]);
+}
+
 void launch_add(const float *a, const float *b, float *out, int size)
 {
   add_kernel<<<(size + 255) / 256, 256>>>(a, b, out, size);
@@ -692,4 +790,48 @@ void launch_broadcasted_batched_matmul(
       N,
       K,
       out_batch_size);
+}
+
+void launch_transpose_last_two_dims(
+    const float *input,
+    float *output,
+    const int *in_shape,
+    const int *out_shape,
+    int ndim,
+    int total_size)
+{
+  int threads = 256;
+  int blocks = (total_size + threads - 1) / threads;
+
+  transpose_last_two_dims_kernel<<<blocks, threads>>>(
+      input,
+      output,
+      in_shape,
+      out_shape,
+      ndim,
+      total_size);
+}
+
+void launch_sum_to_shape(
+    const float *input,
+    float *output,
+    const int *in_shape,
+    const int *out_shape,
+    const int *out_stride,
+    int in_ndim,
+    int out_ndim,
+    int input_size)
+{
+  int threads = 256;
+  int blocks = (input_size + threads - 1) / threads;
+
+  sum_to_shape_kernel<<<blocks, threads>>>(
+      input,
+      output,
+      in_shape,
+      out_shape,
+      out_stride,
+      in_ndim,
+      out_ndim,
+      input_size);
 }

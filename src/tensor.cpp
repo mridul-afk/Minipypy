@@ -102,6 +102,24 @@ void launch_div_broadcast(
     int out_ndim,
     int out_size);
 
+void launch_transpose_last_two_dims(
+    const float *input,
+    float *output,
+    const int *in_shape,
+    const int *out_shape,
+    int ndim,
+    int total_size);
+
+void launch_sum_to_shape(
+    const float *input,
+    float *output,
+    const int *in_shape,
+    const int *out_shape,
+    const int *out_stride,
+    int in_ndim,
+    int out_ndim,
+    int input_size);
+
 std::vector<int> broadcast_shape(
     const std::vector<int> &a,
     const std::vector<int> &b)
@@ -820,6 +838,76 @@ Tensor Tensor::max() const
       d_data,
       out.d_data,
       size);
+
+  return out;
+}
+
+Tensor Tensor::transpose_last_two_dims() const
+{
+  if (shape.size() < 2)
+    throw std::runtime_error("transpose_last_two_dims requires tensor with at least 2 dimensions");
+
+  std::vector<int> out_shape = shape;
+
+  int ndim = static_cast<int>(shape.size());
+
+  std::swap(out_shape[ndim - 1], out_shape[ndim - 2]);
+
+  Tensor out(out_shape, requires_grad);
+
+  int *d_in_shape = copy_int_vector_to_device(shape);
+  int *d_out_shape = copy_int_vector_to_device(out_shape);
+
+  launch_transpose_last_two_dims(
+      d_data,
+      out.d_data,
+      d_in_shape,
+      d_out_shape,
+      ndim,
+      out.size);
+
+  free_device_int_vector(d_in_shape, shape);
+  free_device_int_vector(d_out_shape, out_shape);
+
+  return out;
+}
+
+Tensor Tensor::sum_to_shape(std::vector<int> target_shape) const
+{
+  if (target_shape.size() > shape.size())
+    throw std::runtime_error("sum_to_shape target shape cannot have more dimensions than input shape");
+
+  Tensor out(target_shape, requires_grad);
+
+  // Important: output must start at zero because kernel uses atomicAdd.
+  launch_fill(out.d_data, 0.0f, out.size);
+
+  std::vector<int> out_stride(target_shape.size());
+
+  int running_stride = 1;
+  for (int i = static_cast<int>(target_shape.size()) - 1; i >= 0; --i)
+  {
+    out_stride[i] = running_stride;
+    running_stride *= target_shape[i];
+  }
+
+  int *d_in_shape = copy_int_vector_to_device(shape);
+  int *d_out_shape = copy_int_vector_to_device(target_shape);
+  int *d_out_stride = copy_int_vector_to_device(out_stride);
+
+  launch_sum_to_shape(
+      d_data,
+      out.d_data,
+      d_in_shape,
+      d_out_shape,
+      d_out_stride,
+      static_cast<int>(shape.size()),
+      static_cast<int>(target_shape.size()),
+      size);
+
+  free_device_int_vector(d_in_shape, shape);
+  free_device_int_vector(d_out_shape, target_shape);
+  free_device_int_vector(d_out_stride, out_stride);
 
   return out;
 }

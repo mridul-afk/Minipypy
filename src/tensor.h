@@ -52,6 +52,8 @@ public:
    Tensor reshape(std::vector<int> new_shape) const;
    Tensor flatten() const;
    Tensor transpose() const;
+   Tensor transpose_last_two_dims() const;
+   Tensor sum_to_shape(std::vector<int> target_shape) const;
    Tensor sum() const;
    Tensor mean() const;
    Tensor max() const;
