@@ -7,6 +7,28 @@
 #include <utility>
 #include <algorithm>
 
+static void add_parent_to_node(
+    std::shared_ptr<AutogradNode> node,
+    const Tensor &t)
+{
+  if (t.grad_fn)
+  {
+    Tensor saved(t.cpu(), t.shape, t.requires_grad);
+    saved.grad_fn = t.grad_fn;
+
+    node->saved_tensors.push_back(
+        std::make_shared<Tensor>(std::move(saved)));
+
+    node->parents.push_back(
+        node->saved_tensors.back().get());
+  }
+  else
+  {
+    node->parents.push_back(
+        const_cast<Tensor *>(&t));
+  }
+}
+
 // CUDA launchers from tensor.cu
 void launch_add(const float *a, const float *b, float *out, int size);
 void launch_mul(const float *a, const float *b, float *out, int size);
@@ -460,10 +482,11 @@ Tensor Tensor::operator+(const Tensor &other) const
 
     if (out.requires_grad)
     {
-      out.grad_fn = std::make_shared<AutogradNode>(
-          OpType::ADD,
-          std::vector<Tensor *>{const_cast<Tensor *>(this),
-                                const_cast<Tensor *>(&other)});
+      out.grad_fn = std::make_shared<AutogradNode>();
+      out.grad_fn->op = OpType::ADD;
+
+      add_parent_to_node(out.grad_fn, *this);
+      add_parent_to_node(out.grad_fn, other);
     }
 
     return out;
@@ -493,10 +516,11 @@ Tensor Tensor::operator+(const Tensor &other) const
 
   if (out.requires_grad)
   {
-    out.grad_fn = std::make_shared<AutogradNode>(
-        OpType::ADD,
-        std::vector<Tensor *>{const_cast<Tensor *>(this),
-                              const_cast<Tensor *>(&other)});
+    out.grad_fn = std::make_shared<AutogradNode>();
+    out.grad_fn->op = OpType::ADD;
+
+    add_parent_to_node(out.grad_fn, *this);
+    add_parent_to_node(out.grad_fn, other);
   }
 
   return out;
@@ -513,10 +537,11 @@ Tensor Tensor::operator-(const Tensor &other) const
 
     if (out.requires_grad)
     {
-      out.grad_fn = std::make_shared<AutogradNode>(
-          OpType::SUB,
-          std::vector<Tensor *>{const_cast<Tensor *>(this),
-                                const_cast<Tensor *>(&other)});
+      out.grad_fn = std::make_shared<AutogradNode>();
+      out.grad_fn->op = OpType::SUB;
+
+      add_parent_to_node(out.grad_fn, *this);
+      add_parent_to_node(out.grad_fn, other);
     }
 
     return out;
@@ -546,10 +571,11 @@ Tensor Tensor::operator-(const Tensor &other) const
 
   if (out.requires_grad)
   {
-    out.grad_fn = std::make_shared<AutogradNode>(
-        OpType::SUB,
-        std::vector<Tensor *>{const_cast<Tensor *>(this),
-                              const_cast<Tensor *>(&other)});
+    out.grad_fn = std::make_shared<AutogradNode>();
+    out.grad_fn->op = OpType::SUB;
+
+    add_parent_to_node(out.grad_fn, *this);
+    add_parent_to_node(out.grad_fn, other);
   }
 
   return out;
@@ -566,10 +592,11 @@ Tensor Tensor::operator*(const Tensor &other) const
 
     if (out.requires_grad)
     {
-      out.grad_fn = std::make_shared<AutogradNode>(
-          OpType::MUL,
-          std::vector<Tensor *>{const_cast<Tensor *>(this),
-                                const_cast<Tensor *>(&other)});
+      out.grad_fn = std::make_shared<AutogradNode>();
+      out.grad_fn->op = OpType::MUL;
+
+      add_parent_to_node(out.grad_fn, *this);
+      add_parent_to_node(out.grad_fn, other);
     }
 
     return out;
@@ -603,10 +630,11 @@ Tensor Tensor::operator*(const Tensor &other) const
 
   if (out.requires_grad)
   {
-    out.grad_fn = std::make_shared<AutogradNode>(
-        OpType::MUL,
-        std::vector<Tensor *>{const_cast<Tensor *>(this),
-                              const_cast<Tensor *>(&other)});
+    out.grad_fn = std::make_shared<AutogradNode>();
+    out.grad_fn->op = OpType::MUL;
+
+    add_parent_to_node(out.grad_fn, *this);
+    add_parent_to_node(out.grad_fn, other);
   }
 
   return out;
@@ -623,10 +651,11 @@ Tensor Tensor::operator/(const Tensor &other) const
 
     if (out.requires_grad)
     {
-      out.grad_fn = std::make_shared<AutogradNode>(
-          OpType::DIV,
-          std::vector<Tensor *>{const_cast<Tensor *>(this),
-                                const_cast<Tensor *>(&other)});
+      out.grad_fn = std::make_shared<AutogradNode>();
+      out.grad_fn->op = OpType::DIV;
+
+      add_parent_to_node(out.grad_fn, *this);
+      add_parent_to_node(out.grad_fn, other);
     }
 
     return out;
@@ -656,10 +685,11 @@ Tensor Tensor::operator/(const Tensor &other) const
 
   if (out.requires_grad)
   {
-    out.grad_fn = std::make_shared<AutogradNode>(
-        OpType::DIV,
-        std::vector<Tensor *>{const_cast<Tensor *>(this),
-                              const_cast<Tensor *>(&other)});
+    out.grad_fn = std::make_shared<AutogradNode>();
+    out.grad_fn->op = OpType::DIV;
+
+    add_parent_to_node(out.grad_fn, *this);
+    add_parent_to_node(out.grad_fn, other);
   }
 
   return out;
@@ -731,10 +761,11 @@ Tensor Tensor::matmul(const Tensor &other) const
   }
   if (out.requires_grad)
   {
-    out.grad_fn = std::make_shared<AutogradNode>(
-        OpType::MATMUL,
-        std::vector<Tensor *>{const_cast<Tensor *>(this),
-                              const_cast<Tensor *>(&other)});
+    out.grad_fn = std::make_shared<AutogradNode>();
+    out.grad_fn->op = OpType::MATMUL;
+
+    add_parent_to_node(out.grad_fn, *this);
+    add_parent_to_node(out.grad_fn, other);
   }
 
   return out;
@@ -1039,4 +1070,38 @@ Tensor Tensor::rdiv_scalar(float scalar) const
       size);
 
   return out;
+}
+
+Tensor Tensor::detach() const
+{
+  Tensor out = clone();
+
+  out.requires_grad = false;
+  out.grad_fn = nullptr;
+
+  if (out.grad_tensor)
+  {
+    delete out.grad_tensor;
+    out.grad_tensor = nullptr;
+  }
+
+  return out;
+}
+
+Tensor &Tensor::requires_grad_(bool value)
+{
+  requires_grad = value;
+
+  if (!requires_grad)
+  {
+    grad_fn = nullptr;
+
+    if (grad_tensor)
+    {
+      delete grad_tensor;
+      grad_tensor = nullptr;
+    }
+  }
+
+  return *this;
 }

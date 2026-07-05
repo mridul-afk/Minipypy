@@ -71,4 +71,6 @@ public:
    Tensor grad() const;
    void zero_grad();
    void backward();
+   Tensor detach() const;
+   Tensor &requires_grad_(bool value = true);
 };

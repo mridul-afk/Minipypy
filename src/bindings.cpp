@@ -252,6 +252,10 @@ PYBIND11_MODULE(_C, m)
         .def("rsub_scalar", &Tensor::rsub_scalar)
         .def("div_scalar", &Tensor::div_scalar)
         .def("rdiv_scalar", &Tensor::rdiv_scalar)
+        .def("detach", &Tensor::detach)
+        .def("requires_grad_", &Tensor::requires_grad_,
+             py::arg("value") = true,
+             py::return_value_policy::reference_internal)
 
         .def("__repr__", [](const Tensor &t)
              {
