@@ -120,6 +120,42 @@ void launch_sum_to_shape(
     int out_ndim,
     int input_size);
 
+void launch_mul_scalar(
+    const float *a,
+    float *out,
+    float scalar,
+    int size);
+
+void launch_add_scalar(
+    const float *a,
+    float *out,
+    float scalar,
+    int size);
+
+void launch_sub_scalar(
+    const float *a,
+    float *out,
+    float scalar,
+    int size);
+
+void launch_rsub_scalar(
+    const float *a,
+    float *out,
+    float scalar,
+    int size);
+
+void launch_div_scalar(
+    const float *a,
+    float *out,
+    float scalar,
+    int size);
+
+void launch_rdiv_scalar(
+    const float *a,
+    float *out,
+    float scalar,
+    int size);
+
 std::vector<int> broadcast_shape(
     const std::vector<int> &a,
     const std::vector<int> &b)
@@ -921,6 +957,86 @@ Tensor Tensor::clone() const
   std::vector<float> host = cpu();
 
   Tensor out(host, shape, requires_grad);
+
+  return out;
+}
+
+// TENSOR-SCALAR OPS
+
+Tensor Tensor::mul_scalar(float scalar) const
+{
+  Tensor out(shape, requires_grad);
+
+  launch_mul_scalar(
+      d_data,
+      out.d_data,
+      scalar,
+      size);
+
+  return out;
+}
+
+Tensor Tensor::add_scalar(float scalar) const
+{
+  Tensor out(shape, requires_grad);
+
+  launch_add_scalar(
+      d_data,
+      out.d_data,
+      scalar,
+      size);
+
+  return out;
+}
+
+Tensor Tensor::sub_scalar(float scalar) const
+{
+  Tensor out(shape, requires_grad);
+
+  launch_sub_scalar(
+      d_data,
+      out.d_data,
+      scalar,
+      size);
+
+  return out;
+}
+
+Tensor Tensor::rsub_scalar(float scalar) const
+{
+  Tensor out(shape, requires_grad);
+
+  launch_rsub_scalar(
+      d_data,
+      out.d_data,
+      scalar,
+      size);
+
+  return out;
+}
+
+Tensor Tensor::div_scalar(float scalar) const
+{
+  Tensor out(shape, requires_grad);
+
+  launch_div_scalar(
+      d_data,
+      out.d_data,
+      scalar,
+      size);
+
+  return out;
+}
+
+Tensor Tensor::rdiv_scalar(float scalar) const
+{
+  Tensor out(shape, requires_grad);
+
+  launch_rdiv_scalar(
+      d_data,
+      out.d_data,
+      scalar,
+      size);
 
   return out;
 }

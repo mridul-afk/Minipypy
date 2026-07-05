@@ -41,6 +41,14 @@ public:
    Tensor operator-(const Tensor &other) const;
    Tensor operator/(const Tensor &other) const;
 
+   // TENSOR-SCALAR OPS
+   Tensor mul_scalar(float scalar) const;
+   Tensor add_scalar(float scalar) const;
+   Tensor sub_scalar(float scalar) const;
+   Tensor rsub_scalar(float scalar) const;
+   Tensor div_scalar(float scalar) const;
+   Tensor rdiv_scalar(float scalar) const;
+
    // TENSOR OPS
    std::vector<float> cpu() const;
    std::vector<int> get_shape() const;

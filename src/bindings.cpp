@@ -166,10 +166,74 @@ PYBIND11_MODULE(_C, m)
         .def("zero_grad", &Tensor::zero_grad)
         .def("backward", &Tensor::backward)
 
-        .def("__add__", &Tensor::operator+)
-        .def("__mul__", &Tensor::operator*)
-        .def("__sub__", &Tensor::operator-)
-        .def("__truediv__", &Tensor::operator/)
+        .def("__add__",
+             [](const Tensor &a, const Tensor &b)
+             {
+                 return a + b;
+             })
+
+        .def("__add__",
+             [](const Tensor &a, float scalar)
+             {
+                 return a.add_scalar(scalar);
+             })
+
+        .def("__radd__",
+             [](const Tensor &a, float scalar)
+             {
+                 return a.add_scalar(scalar);
+             })
+        .def("__mul__",
+             [](const Tensor &a, const Tensor &b)
+             {
+                 return a * b;
+             })
+
+        .def("__mul__",
+             [](const Tensor &a, float scalar)
+             {
+                 return a.mul_scalar(scalar);
+             })
+
+        .def("__rmul__",
+             [](const Tensor &a, float scalar)
+             {
+                 return a.mul_scalar(scalar);
+             })
+        .def("__sub__",
+             [](const Tensor &a, const Tensor &b)
+             {
+                 return a - b;
+             })
+
+        .def("__sub__",
+             [](const Tensor &a, float scalar)
+             {
+                 return a.sub_scalar(scalar);
+             })
+
+        .def("__rsub__",
+             [](const Tensor &a, float scalar)
+             {
+                 return a.rsub_scalar(scalar);
+             })
+        .def("__truediv__",
+             [](const Tensor &a, const Tensor &b)
+             {
+                 return a / b;
+             })
+
+        .def("__truediv__",
+             [](const Tensor &a, float scalar)
+             {
+                 return a.div_scalar(scalar);
+             })
+
+        .def("__rtruediv__",
+             [](const Tensor &a, float scalar)
+             {
+                 return a.rdiv_scalar(scalar);
+             })
 
         .def("matmul", &Tensor::matmul)
         .def("__matmul__", &Tensor::matmul)
@@ -182,6 +246,12 @@ PYBIND11_MODULE(_C, m)
         .def("max", &Tensor::max)
         .def("sum_to_shape", &Tensor::sum_to_shape)
         .def("clone", &Tensor::clone)
+        .def("mul_scalar", &Tensor::mul_scalar)
+        .def("add_scalar", &Tensor::add_scalar)
+        .def("sub_scalar", &Tensor::sub_scalar)
+        .def("rsub_scalar", &Tensor::rsub_scalar)
+        .def("div_scalar", &Tensor::div_scalar)
+        .def("rdiv_scalar", &Tensor::rdiv_scalar)
 
         .def("__repr__", [](const Tensor &t)
              {

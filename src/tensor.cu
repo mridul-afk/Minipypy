@@ -835,3 +835,173 @@ void launch_sum_to_shape(
       out_ndim,
       input_size);
 }
+
+// TENSOR-SCALAR OPS
+
+__global__ void mul_scalar_kernel(
+    const float *a,
+    float *out,
+    float scalar,
+    int size)
+{
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+  if (idx < size)
+    out[idx] = a[idx] * scalar;
+}
+
+void launch_mul_scalar(
+    const float *a,
+    float *out,
+    float scalar,
+    int size)
+{
+  int threads = 256;
+  int blocks = (size + threads - 1) / threads;
+
+  mul_scalar_kernel<<<blocks, threads>>>(
+      a,
+      out,
+      scalar,
+      size);
+}
+
+__global__ void add_scalar_kernel(
+    const float *a,
+    float *out,
+    float scalar,
+    int size)
+{
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+  if (idx < size)
+    out[idx] = a[idx] + scalar;
+}
+
+void launch_add_scalar(
+    const float *a,
+    float *out,
+    float scalar,
+    int size)
+{
+  int threads = 256;
+  int blocks = (size + threads - 1) / threads;
+
+  add_scalar_kernel<<<blocks, threads>>>(
+      a,
+      out,
+      scalar,
+      size);
+}
+
+__global__ void sub_scalar_kernel(
+    const float *a,
+    float *out,
+    float scalar,
+    int size)
+{
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+  if (idx < size)
+    out[idx] = a[idx] - scalar;
+}
+
+void launch_sub_scalar(
+    const float *a,
+    float *out,
+    float scalar,
+    int size)
+{
+  int threads = 256;
+  int blocks = (size + threads - 1) / threads;
+
+  sub_scalar_kernel<<<blocks, threads>>>(
+      a,
+      out,
+      scalar,
+      size);
+}
+
+__global__ void rsub_scalar_kernel(
+    const float *a,
+    float *out,
+    float scalar,
+    int size)
+{
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+  if (idx < size)
+    out[idx] = scalar - a[idx];
+}
+
+void launch_rsub_scalar(
+    const float *a,
+    float *out,
+    float scalar,
+    int size)
+{
+  int threads = 256;
+  int blocks = (size + threads - 1) / threads;
+
+  rsub_scalar_kernel<<<blocks, threads>>>(
+      a,
+      out,
+      scalar,
+      size);
+}
+
+__global__ void div_scalar_kernel(
+    const float *a,
+    float *out,
+    float scalar,
+    int size)
+{
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+  if (idx < size)
+    out[idx] = a[idx] / scalar;
+}
+
+void launch_div_scalar(
+    const float *a,
+    float *out,
+    float scalar,
+    int size)
+{
+  int threads = 256;
+  int blocks = (size + threads - 1) / threads;
+
+  div_scalar_kernel<<<blocks, threads>>>(
+      a,
+      out,
+      scalar,
+      size);
+}
+
+__global__ void rdiv_scalar_kernel(
+    const float *a,
+    float *out,
+    float scalar,
+    int size)
+{
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+  if (idx < size)
+    out[idx] = scalar / a[idx];
+}
+
+void launch_rdiv_scalar(
+    const float *a,
+    float *out,
+    float scalar,
+    int size)
+{
+  int threads = 256;
+  int blocks = (size + threads - 1) / threads;
+
+  rdiv_scalar_kernel<<<blocks, threads>>>(
+      a,
+      out,
+      scalar,
+      size);
+}
