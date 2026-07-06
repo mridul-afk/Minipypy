@@ -256,6 +256,7 @@ PYBIND11_MODULE(_C, m)
         .def("requires_grad_", &Tensor::requires_grad_,
              py::arg("value") = true,
              py::return_value_policy::reference_internal)
+        .def("relu", &Tensor::relu)
 
         .def("__repr__", [](const Tensor &t)
              {

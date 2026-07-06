@@ -73,4 +73,8 @@ public:
    void backward();
    Tensor detach() const;
    Tensor &requires_grad_(bool value = true);
+
+   // ACTIVATION FUNCTIONS
+
+   Tensor relu() const;
 };

@@ -2,18 +2,18 @@
 
 __global__ void fill_kernel(float *data, float value, int size)
 {
-  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
-  if (idx < size)
-    data[idx] = value;
+    if (idx < size)
+        data[idx] = value;
 }
 
 void launch_fill(float *data, float value, int size)
 {
-  int threads = 256;
-  int blocks = (size + threads - 1) / threads;
+    int threads = 256;
+    int blocks = (size + threads - 1) / threads;
 
-  fill_kernel<<<blocks, threads>>>(data, value, size);
+    fill_kernel<<<blocks, threads>>>(data, value, size);
 }
 
 __global__ void mul_backward_kernel(
@@ -22,10 +22,10 @@ __global__ void mul_backward_kernel(
     float *grad_in,
     int size)
 {
-  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
-  if (idx < size)
-    grad_in[idx] += grad_out[idx] * other[idx];
+    if (idx < size)
+        grad_in[idx] += grad_out[idx] * other[idx];
 }
 
 void launch_mul_backward(
@@ -34,24 +34,24 @@ void launch_mul_backward(
     float *grad_in,
     int size)
 {
-  int threads = 256;
-  int blocks = (size + threads - 1) / threads;
+    int threads = 256;
+    int blocks = (size + threads - 1) / threads;
 
-  mul_backward_kernel<<<blocks, threads>>>(
-      grad_out,
-      other,
-      grad_in,
-      size);
+    mul_backward_kernel<<<blocks, threads>>>(
+        grad_out,
+        other,
+        grad_in,
+        size);
 }
 __global__ void sum_backward_kernel(
     const float *grad_out,
     float *grad_in,
     int size)
 {
-  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
-  if (idx < size)
-    grad_in[idx] += grad_out[0];
+    if (idx < size)
+        grad_in[idx] += grad_out[0];
 }
 
 void launch_sum_backward(
@@ -59,13 +59,13 @@ void launch_sum_backward(
     float *grad_in,
     int size)
 {
-  int threads = 256;
-  int blocks = (size + threads - 1) / threads;
+    int threads = 256;
+    int blocks = (size + threads - 1) / threads;
 
-  sum_backward_kernel<<<blocks, threads>>>(
-      grad_out,
-      grad_in,
-      size);
+    sum_backward_kernel<<<blocks, threads>>>(
+        grad_out,
+        grad_in,
+        size);
 }
 
 __global__ void add_backward_kernel(
@@ -73,9 +73,9 @@ __global__ void add_backward_kernel(
     float *grad_in,
     int size)
 {
-  int idx = blockIdx.x * blockDim.x + threadIdx.x;
-  if (idx < size)
-    grad_in[idx] += grad_out[idx];
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < size)
+        grad_in[idx] += grad_out[idx];
 }
 
 void launch_add_backward(
@@ -83,13 +83,13 @@ void launch_add_backward(
     float *grad_in,
     int size)
 {
-  int threads = 256;
-  int blocks = (size + threads - 1) / threads;
+    int threads = 256;
+    int blocks = (size + threads - 1) / threads;
 
-  add_backward_kernel<<<blocks, threads>>>(
-      grad_out,
-      grad_in,
-      size);
+    add_backward_kernel<<<blocks, threads>>>(
+        grad_out,
+        grad_in,
+        size);
 }
 
 __global__ void sub_backward_left_kernel(
@@ -97,9 +97,9 @@ __global__ void sub_backward_left_kernel(
     float *grad_in,
     int size)
 {
-  int idx = blockIdx.x * blockDim.x + threadIdx.x;
-  if (idx < size)
-    grad_in[idx] += grad_out[idx];
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < size)
+        grad_in[idx] += grad_out[idx];
 }
 
 void launch_sub_backward_left(
@@ -107,13 +107,13 @@ void launch_sub_backward_left(
     float *grad_in,
     int size)
 {
-  int threads = 256;
-  int blocks = (size + threads - 1) / threads;
+    int threads = 256;
+    int blocks = (size + threads - 1) / threads;
 
-  sub_backward_left_kernel<<<blocks, threads>>>(
-      grad_out,
-      grad_in,
-      size);
+    sub_backward_left_kernel<<<blocks, threads>>>(
+        grad_out,
+        grad_in,
+        size);
 }
 
 __global__ void sub_backward_right_kernel(
@@ -121,9 +121,9 @@ __global__ void sub_backward_right_kernel(
     float *grad_in,
     int size)
 {
-  int idx = blockIdx.x * blockDim.x + threadIdx.x;
-  if (idx < size)
-    grad_in[idx] -= grad_out[idx];
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < size)
+        grad_in[idx] -= grad_out[idx];
 }
 
 void launch_sub_backward_right(
@@ -131,13 +131,13 @@ void launch_sub_backward_right(
     float *grad_in,
     int size)
 {
-  int threads = 256;
-  int blocks = (size + threads - 1) / threads;
+    int threads = 256;
+    int blocks = (size + threads - 1) / threads;
 
-  sub_backward_right_kernel<<<blocks, threads>>>(
-      grad_out,
-      grad_in,
-      size);
+    sub_backward_right_kernel<<<blocks, threads>>>(
+        grad_out,
+        grad_in,
+        size);
 }
 
 __global__ void div_backward_left_kernel(
@@ -146,10 +146,10 @@ __global__ void div_backward_left_kernel(
     float *grad_a,
     int size)
 {
-  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
-  if (idx < size)
-    grad_a[idx] += grad_out[idx] / b[idx];
+    if (idx < size)
+        grad_a[idx] += grad_out[idx] / b[idx];
 }
 
 void launch_div_backward_left(
@@ -158,14 +158,14 @@ void launch_div_backward_left(
     float *grad_a,
     int size)
 {
-  int threads = 256;
-  int blocks = (size + threads - 1) / threads;
+    int threads = 256;
+    int blocks = (size + threads - 1) / threads;
 
-  div_backward_left_kernel<<<blocks, threads>>>(
-      grad_out,
-      b,
-      grad_a,
-      size);
+    div_backward_left_kernel<<<blocks, threads>>>(
+        grad_out,
+        b,
+        grad_a,
+        size);
 }
 
 __global__ void div_backward_right_kernel(
@@ -175,10 +175,10 @@ __global__ void div_backward_right_kernel(
     float *grad_b,
     int size)
 {
-  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
-  if (idx < size)
-    grad_b[idx] += -grad_out[idx] * a[idx] / (b[idx] * b[idx]);
+    if (idx < size)
+        grad_b[idx] += -grad_out[idx] * a[idx] / (b[idx] * b[idx]);
 }
 
 void launch_div_backward_right(
@@ -188,15 +188,15 @@ void launch_div_backward_right(
     float *grad_b,
     int size)
 {
-  int threads = 256;
-  int blocks = (size + threads - 1) / threads;
+    int threads = 256;
+    int blocks = (size + threads - 1) / threads;
 
-  div_backward_right_kernel<<<blocks, threads>>>(
-      grad_out,
-      a,
-      b,
-      grad_b,
-      size);
+    div_backward_right_kernel<<<blocks, threads>>>(
+        grad_out,
+        a,
+        b,
+        grad_b,
+        size);
 }
 
 __global__ void mean_backward_kernel(
@@ -204,10 +204,10 @@ __global__ void mean_backward_kernel(
     float *grad_in,
     int size)
 {
-  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
-  if (idx < size)
-    grad_in[idx] += grad_out[0] / size;
+    if (idx < size)
+        grad_in[idx] += grad_out[0] / size;
 }
 
 void launch_mean_backward(
@@ -215,11 +215,38 @@ void launch_mean_backward(
     float *grad_in,
     int size)
 {
-  int threads = 256;
-  int blocks = (size + threads - 1) / threads;
+    int threads = 256;
+    int blocks = (size + threads - 1) / threads;
 
-  mean_backward_kernel<<<blocks, threads>>>(
-      grad_out,
-      grad_in,
-      size);
+    mean_backward_kernel<<<blocks, threads>>>(
+        grad_out,
+        grad_in,
+        size);
+}
+
+__global__ void relu_backward_kernel(
+    const float *input,
+    const float *grad_out,
+    float *grad_in,
+    int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (idx < size)
+    {
+        float grad = input[idx] > 0.0f ? grad_out[idx] : 0.0f;
+        atomicAdd(&grad_in[idx], grad);
+    }
+}
+
+void launch_relu_backward(
+    const float *input,
+    const float *grad_out,
+    float *grad_in,
+    int size)
+{
+    int threads = 256;
+    int blocks = (size + threads - 1) / threads;
+
+    relu_backward_kernel<<<blocks, threads>>>(input, grad_out, grad_in, size);
 }

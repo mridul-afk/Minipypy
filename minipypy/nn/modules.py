@@ -42,3 +42,7 @@ class Linear(Module):
     def step(self, lr):
         self.W = (self.W - self.W.grad() * lr).detach().requires_grad_(True)
         self.b = (self.b - self.b.grad() * lr).detach().requires_grad_(True)
+
+class ReLU(Module):
+    def forward(self, x):
+        return x.relu()

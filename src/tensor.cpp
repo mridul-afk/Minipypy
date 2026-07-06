@@ -178,6 +178,11 @@ void launch_rdiv_scalar(
     float scalar,
     int size);
 
+void launch_relu_forward(
+    const float *a,
+    float *out,
+    int size);
+
 std::vector<int> broadcast_shape(
     const std::vector<int> &a,
     const std::vector<int> &b)
@@ -1104,4 +1109,21 @@ Tensor &Tensor::requires_grad_(bool value)
   }
 
   return *this;
+}
+
+Tensor Tensor::relu() const
+{
+  Tensor out(this->shape, this->requires_grad);
+
+  launch_relu_forward(this->d_data, out.d_data, this->size);
+
+  if (this->requires_grad)
+  {
+    out.grad_fn = std::make_shared<AutogradNode>();
+    out.grad_fn->op = OpType::RELU;
+
+    add_parent_to_node(out.grad_fn, *this);
+  }
+
+  return out;
 }

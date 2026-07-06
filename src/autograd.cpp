@@ -6,6 +6,12 @@
 #include <unordered_set>
 #include <algorithm>
 
+void launch_relu_backward(
+    const float *input,
+    const float *grad_out,
+    float *grad_in,
+    int size);
+
 Tensor Tensor::grad() const
 {
   if (!grad_tensor)
@@ -288,6 +294,19 @@ void Tensor::backward()
             grad_b.d_data,
             b->grad_tensor->d_data,
             b->size);
+      }
+    }
+    else if (tensor->grad_fn->op == OpType::RELU)
+    {
+      Tensor *a = tensor->grad_fn->parents[0];
+
+      if (a && a->requires_grad)
+      {
+        launch_relu_backward(
+            a->d_data,
+            tensor->grad_tensor->d_data,
+            a->grad_tensor->d_data,
+            a->size);
       }
     }
   }

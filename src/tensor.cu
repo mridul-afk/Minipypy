@@ -1005,3 +1005,27 @@ void launch_rdiv_scalar(
       scalar,
       size);
 }
+
+__global__ void relu_forward_kernel(
+    const float *a,
+    float *out,
+    int size)
+{
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+  if (idx < size)
+  {
+    out[idx] = a[idx] > 0.0f ? a[idx] : 0.0f;
+  }
+}
+
+void launch_relu_forward(
+    const float *a,
+    float *out,
+    int size)
+{
+  int threads = 256;
+  int blocks = (size + threads - 1) / threads;
+
+  relu_forward_kernel<<<blocks, threads>>>(a, out, size);
+}
