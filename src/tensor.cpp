@@ -227,6 +227,13 @@ void launch_relu_forward(
     float *out,
     int size);
 
+void launch_softmax_forward(
+    const float *input,
+    float *output,
+    int outer_size,
+    int softmax_size,
+    int inner_size);
+
 std::vector<int> broadcast_shape(
     const std::vector<int> &a,
     const std::vector<int> &b)
@@ -1309,6 +1316,120 @@ Tensor Tensor::relu() const
     out.grad_fn->op = OpType::RELU;
 
     add_parent_to_node(out.grad_fn, *this);
+  }
+
+  return out;
+}
+
+Tensor Tensor::softmax(int dim) const
+{
+  /*
+    N-D softmax for contiguous tensors.
+
+    For shape:
+      [d0, d1, ..., dn]
+
+    softmax(dim) applies softmax independently over every slice
+    along the selected dimension.
+
+    We flatten the N-D problem into:
+
+      outer_size   = product of dims before dim
+      softmax_size = shape[dim]
+      inner_size   = product of dims after dim
+
+    Each CUDA block handles one softmax group.
+
+    Example:
+      shape = [2, 3, 4]
+      dim = 1
+
+      outer_size   = 2
+      softmax_size = 3
+      inner_size   = 4
+
+      Number of groups = outer_size * inner_size = 8
+  */
+
+  int ndim_count = static_cast<int>(shape.size());
+
+  if (ndim_count == 0)
+  {
+    throw std::runtime_error("softmax requires at least 1D tensor");
+  }
+
+  /*
+    Support negative dimensions.
+
+    Example:
+      dim = -1 means last dimension.
+  */
+  if (dim < 0)
+  {
+    dim += ndim_count;
+  }
+
+  if (dim < 0 || dim >= ndim_count)
+  {
+    throw std::runtime_error("softmax dim out of range");
+  }
+
+  int outer_size = 1;
+  for (int i = 0; i < dim; i++)
+  {
+    outer_size *= shape[i];
+  }
+
+  int softmax_size = shape[dim];
+
+  int inner_size = 1;
+  for (int i = dim + 1; i < ndim_count; i++)
+  {
+    inner_size *= shape[i];
+  }
+
+  Tensor out(this->shape, this->requires_grad);
+
+  launch_softmax_forward(
+      this->d_data,
+      out.d_data,
+      outer_size,
+      softmax_size,
+      inner_size);
+
+  if (this->requires_grad)
+  {
+    out.grad_fn = std::make_shared<AutogradNode>();
+    out.grad_fn->op = OpType::SOFTMAX;
+
+    /*
+      Store normalized dim for backward.
+
+      Backward needs to know which axis softmax was applied over.
+    */
+    out.grad_fn->dim = dim;
+
+    /*
+      Parent is the original input tensor.
+      Gradients should accumulate into this parent.
+    */
+    add_parent_to_node(out.grad_fn, *this);
+
+    /*
+      Softmax backward needs the softmax output values.
+
+      We save output as a tensor in saved_tensors.
+
+      This uses CPU roundtrip for now:
+        GPU -> CPU -> GPU
+
+      It is simple and correct. Later we can replace this with
+      a GPU-to-GPU clone.
+    */
+    Tensor saved_out(out.cpu(), out.shape, false);
+
+    out.grad_fn->saved_tensors.push_back(
+        std::make_shared<Tensor>(std::move(saved_out)));
   }
 
   return out;

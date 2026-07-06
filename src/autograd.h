@@ -16,22 +16,31 @@ enum class OpType
     DIV,
     MEAN,
     MATMUL,
-    RELU
+    RELU,
+    SOFTMAX
 };
 
 struct AutogradNode
 {
-    OpType op;
+    OpType op = OpType::NONE;
+
     std::vector<Tensor *> parents;
 
-    // Own intermediate tensors so temporaries like (x*x) survive.
+    /*
+      saved_tensors keeps temporary/intermediate tensors alive
+      until backward runs.
+    */
     std::vector<std::shared_ptr<Tensor>> saved_tensors;
 
-    AutogradNode()
-        : op(OpType::NONE) {}
+    /*
+      Some ops need extra metadata for backward.
 
-    AutogradNode(OpType op, std::vector<Tensor *> parents)
-        : op(op), parents(parents) {}
+      Example:
+        softmax(dim=1)
+
+      Backward must know which dimension softmax was applied over.
+    */
+    int dim = -1;
 };
 
 void launch_fill(float *data, float value, int size);

@@ -76,6 +76,7 @@ public:
 
    // ACTIVATION FUNCTIONS
    Tensor relu() const;
+   Tensor softmax(int dim = -1) const;
 
    // SCALAR FUNCTIONS
    Tensor operator+(float scalar) const;

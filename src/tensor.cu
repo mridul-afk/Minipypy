@@ -2,6 +2,8 @@
 #include <cstdio>
 #include <cfloat>
 #include <vector>
+#include <float.h>
+#include <math.h>
 
 __global__ void add_kernel(const float *a, const float *b, float *out, int size)
 {
@@ -1028,4 +1030,143 @@ void launch_relu_forward(
   int blocks = (size + threads - 1) / threads;
 
   relu_forward_kernel<<<blocks, threads>>>(a, out, size);
+}
+
+__global__ void softmax_forward_kernel(
+    const float *input,
+    float *output,
+    int outer_size,
+    int softmax_size,
+    int inner_size)
+{
+  /*
+    N-D contiguous softmax.
+
+    For a tensor shape:
+      [d0, d1, ..., dn]
+
+    softmax(dim) is flattened into:
+
+      outer_size   = product of dims before dim
+      softmax_size = shape[dim]
+      inner_size   = product of dims after dim
+
+    Each CUDA block handles one softmax group.
+
+    Example:
+      shape = [2, 3, 4]
+      dim = 1
+
+      outer_size   = 2
+      softmax_size = 3
+      inner_size   = 4
+
+    There are outer_size * inner_size groups.
+    Each group has softmax_size elements.
+  */
+
+  int group = blockIdx.x;
+  int total_groups = outer_size * inner_size;
+
+  if (group >= total_groups)
+    return;
+
+  int outer_idx = group / inner_size;
+  int inner_idx = group % inner_size;
+
+  int base = outer_idx * softmax_size * inner_size + inner_idx;
+
+  /*
+    Step 1:
+    Find max value inside this softmax group.
+
+    This makes softmax numerically stable:
+      exp(x_i - max(x))
+  */
+  float local_max = -FLT_MAX;
+
+  for (int j = threadIdx.x; j < softmax_size; j += blockDim.x)
+  {
+    int idx = base + j * inner_size;
+    float v = input[idx];
+
+    if (v > local_max)
+      local_max = v;
+  }
+
+  __shared__ float shared_max[256];
+  shared_max[threadIdx.x] = local_max;
+  __syncthreads();
+
+  for (int stride = blockDim.x / 2; stride > 0; stride >>= 1)
+  {
+    if (threadIdx.x < stride)
+    {
+      if (shared_max[threadIdx.x + stride] > shared_max[threadIdx.x])
+        shared_max[threadIdx.x] = shared_max[threadIdx.x + stride];
+    }
+
+    __syncthreads();
+  }
+
+  float group_max = shared_max[0];
+
+  /*
+    Step 2:
+    Compute exp(x - max) and sum.
+  */
+  float local_sum = 0.0f;
+
+  for (int j = threadIdx.x; j < softmax_size; j += blockDim.x)
+  {
+    int idx = base + j * inner_size;
+    float e = expf(input[idx] - group_max);
+
+    output[idx] = e;
+    local_sum += e;
+  }
+
+  __shared__ float shared_sum[256];
+  shared_sum[threadIdx.x] = local_sum;
+  __syncthreads();
+
+  for (int stride = blockDim.x / 2; stride > 0; stride >>= 1)
+  {
+    if (threadIdx.x < stride)
+    {
+      shared_sum[threadIdx.x] += shared_sum[threadIdx.x + stride];
+    }
+
+    __syncthreads();
+  }
+
+  float group_sum = shared_sum[0];
+
+  /*
+    Step 3:
+    Normalize.
+  */
+  for (int j = threadIdx.x; j < softmax_size; j += blockDim.x)
+  {
+    int idx = base + j * inner_size;
+    output[idx] = output[idx] / group_sum;
+  }
+}
+
+void launch_softmax_forward(
+    const float *input,
+    float *output,
+    int outer_size,
+    int softmax_size,
+    int inner_size)
+{
+  int threads = 256;
+  int blocks = outer_size * inner_size;
+
+  softmax_forward_kernel<<<blocks, threads>>>(
+      input,
+      output,
+      outer_size,
+      softmax_size,
+      inner_size);
 }

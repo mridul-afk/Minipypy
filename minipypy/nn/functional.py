@@ -17,3 +17,6 @@ def hinge_loss(pred, target):
     """
     margin = 1.0 - target * pred
     return relu(margin).mean()
+
+def softmax(x, dim = -1):
+    return x.softmax(dim)

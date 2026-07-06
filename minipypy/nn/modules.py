@@ -62,6 +62,14 @@ class ReLU(Module):
         return x.relu()
 
 
+class Softmax(Module):
+    def __init__(self, dim=-1):
+        self.dim = dim
+
+    def forward(self, x):
+        return x.softmax(self.dim)
+
+
 class Sequential(Module):
     def __init__(self, *layers):
         self.layers = list(layers)

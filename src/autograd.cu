@@ -250,3 +250,98 @@ void launch_relu_backward(
 
     relu_backward_kernel<<<blocks, threads>>>(input, grad_out, grad_in, size);
 }
+
+__global__ void softmax_backward_kernel(
+    const float *softmax_output,
+    const float *grad_out,
+    float *grad_in,
+    int outer_size,
+    int softmax_size,
+    int inner_size)
+{
+    /*
+      Softmax backward.
+
+      Formula:
+        grad_x_i = y_i * (grad_out_i - sum_j(grad_out_j * y_j))
+
+      where:
+        y = softmax(x)
+
+      This computes the Jacobian-vector product efficiently
+      without constructing the full Jacobian matrix.
+    */
+
+    int group = blockIdx.x;
+    int total_groups = outer_size * inner_size;
+
+    if (group >= total_groups)
+        return;
+
+    int outer_idx = group / inner_size;
+    int inner_idx = group % inner_size;
+
+    int base = outer_idx * softmax_size * inner_size + inner_idx;
+
+    /*
+      Step 1:
+      dot = sum_j grad_out_j * softmax_j
+    */
+    float local_dot = 0.0f;
+
+    for (int j = threadIdx.x; j < softmax_size; j += blockDim.x)
+    {
+        int idx = base + j * inner_size;
+        local_dot += grad_out[idx] * softmax_output[idx];
+    }
+
+    __shared__ float shared_dot[256];
+    shared_dot[threadIdx.x] = local_dot;
+    __syncthreads();
+
+    for (int stride = blockDim.x / 2; stride > 0; stride >>= 1)
+    {
+        if (threadIdx.x < stride)
+        {
+            shared_dot[threadIdx.x] += shared_dot[threadIdx.x + stride];
+        }
+
+        __syncthreads();
+    }
+
+    float dot = shared_dot[0];
+
+    /*
+      Step 2:
+      grad_x_i = y_i * (grad_out_i - dot)
+
+      Use atomicAdd because MiniPyPy autograd accumulates gradients.
+    */
+    for (int j = threadIdx.x; j < softmax_size; j += blockDim.x)
+    {
+        int idx = base + j * inner_size;
+        float grad = softmax_output[idx] * (grad_out[idx] - dot);
+
+        atomicAdd(&grad_in[idx], grad);
+    }
+}
+
+void launch_softmax_backward(
+    const float *softmax_output,
+    const float *grad_out,
+    float *grad_in,
+    int outer_size,
+    int softmax_size,
+    int inner_size)
+{
+    int threads = 256;
+    int blocks = outer_size * inner_size;
+
+    softmax_backward_kernel<<<blocks, threads>>>(
+        softmax_output,
+        grad_out,
+        grad_in,
+        outer_size,
+        softmax_size,
+        inner_size);
+}

@@ -248,6 +248,7 @@ PYBIND11_MODULE(_C, m)
         .def("detach", &Tensor::detach)
         .def("requires_grad_", &Tensor::requires_grad_, py::arg("value") = true, py::return_value_policy::reference_internal)
         .def("relu", &Tensor::relu)
+        .def("softmax", &Tensor::softmax, py::arg("dim") = -1)
 
         .def("__repr__", [](const Tensor &t)
              {

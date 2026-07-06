@@ -12,6 +12,14 @@ void launch_relu_backward(
     float *grad_in,
     int size);
 
+void launch_softmax_backward(
+    const float *softmax_output,
+    const float *grad_out,
+    float *grad_in,
+    int outer_size,
+    int softmax_size,
+    int inner_size);
+
 Tensor Tensor::grad() const
 {
   if (!grad_tensor)
@@ -307,6 +315,66 @@ void Tensor::backward()
             tensor->grad_tensor->d_data,
             a->grad_tensor->d_data,
             a->size);
+      }
+    }
+    else if (tensor->grad_fn->op == OpType::SOFTMAX)
+    {
+      Tensor *a = tensor->grad_fn->parents[0];
+
+      if (a && a->requires_grad)
+      {
+        int ndim_count = static_cast<int>(a->shape.size());
+
+        if (ndim_count == 0)
+        {
+          throw std::runtime_error("softmax backward requires at least 1D tensor");
+        }
+
+        int dim = tensor->grad_fn->dim;
+
+        if (dim < 0 || dim >= ndim_count)
+        {
+          throw std::runtime_error("softmax backward dim out of range");
+        }
+
+        int outer_size = 1;
+        for (int i = 0; i < dim; i++)
+        {
+          outer_size *= a->shape[i];
+        }
+
+        int softmax_size = a->shape[dim];
+
+        int inner_size = 1;
+        for (int i = dim + 1; i < ndim_count; i++)
+        {
+          inner_size *= a->shape[i];
+        }
+
+        if (tensor->grad_fn->saved_tensors.empty())
+        {
+          throw std::runtime_error("softmax backward missing saved softmax output");
+        }
+
+        /*
+          Use saved_tensors.back().
+
+          Why?
+            add_parent_to_node() may also store intermediate parent tensors
+            inside saved_tensors.
+
+          The softmax output is pushed after add_parent_to_node(),
+          so it is always the last saved tensor.
+        */
+        Tensor *softmax_output = tensor->grad_fn->saved_tensors.back().get();
+
+        launch_softmax_backward(
+            softmax_output->d_data,
+            tensor->grad_tensor->d_data,
+            a->grad_tensor->d_data,
+            outer_size,
+            softmax_size,
+            inner_size);
       }
     }
   }
