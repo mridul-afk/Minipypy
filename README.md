@@ -1,214 +1,443 @@
 # MiniPyPy
 
-MiniPyPy is a PyTorch-inspired tensor framework built entirely from scratch using **C++**, **CUDA**, and **pybind11**.
+MiniPyPy is a minimal PyTorch-like deep learning framework built with a custom C++/CUDA tensor engine, Python bindings, reverse-mode autograd, and a growing high-level neural network API.
 
-The goal of this project is to understand how modern deep learning frameworks such as PyTorch work internally by implementing every major component from first principles.
+The goal of MiniPyPy is to build a small but understandable CUDA-backed deep learning framework from scratch, then extend it with TensorFold low-rank neural network layers.
 
----
+## Current Status
 
-# Features
+MiniPyPy currently supports:
 
-## Tensor System
+* CUDA-backed tensors
+* Python bindings through pybind11
+* Elementwise tensor operations
+* Broadcasting
+* Scalar tensor operations
+* Reverse-mode autograd
+* Matmul forward/backward
+* ReLU forward/backward
+* Basic neural network modules
+* Sequential models
+* SGD optimizer
+* MSELoss
+* HingeLoss
 
-* Custom Tensor class
-* N-dimensional tensor creation
-* Nested Python list support
-* Shape & stride metadata
-* GPU-first tensor storage
-* CPU ↔ GPU memory transfers
-* Shape validation
-* Ragged tensor detection
+Latest milestone:
 
-## Tensor Operations
+```text
+v0.8.2 — Scalar Autograd and HingeLoss
+```
 
-* Element-wise addition
-* Element-wise subtraction
-* Element-wise multiplication
-* Element-wise division
-* NumPy/PyTorch-style broadcasting
-* 2D Matrix Multiplication
-* Reshape
-* Flatten
-* 2D Transpose
-
-## Reduction Operations
-
-* Sum
-* Mean
-* Max
-
-## CUDA Backend
-
-* CUDA-accelerated tensor operations
-* Asynchronous kernel execution
-* Custom CUDA memory pool
-* GPU memory reuse
-* Broadcast-aware CUDA kernels
-
-## Python Integration
-
-* Python bindings using pybind11
-* Natural nested-list tensor construction
-* Readable N-dimensional tensor representation
-
----
-
-# Example
+## Example
 
 ```python
 import minipypy as mini
 
-a = mini.Tensor([
-    [1, 2, 3],
-    [4, 5, 6]
-])
+x = mini.Tensor([[1.0], [2.0], [3.0], [4.0]])
+y = mini.Tensor([[2.0], [4.0], [6.0], [8.0]])
 
-b = mini.Tensor([10, 20, 30])
+model = mini.nn.Sequential(
+    mini.nn.Linear(1, 4),
+    mini.nn.ReLU(),
+    mini.nn.Linear(4, 1),
+)
 
-print(a + b)
+loss_fn = mini.nn.MSELoss()
+optimizer = mini.optim.SGD(model, lr=0.01)
 
-print(a.matmul(
-    mini.Tensor([
-        [1, 2],
-        [3, 4],
-        [5, 6]
-    ])
-))
+for epoch in range(100):
+    pred = model(x)
+    loss = loss_fn(pred, y)
 
-print(a.sum())
-print(a.mean())
-print(a.max())
+    optimizer.zero_grad()
+    loss.backward()
+    optimizer.step()
 
-print(a.reshape([3, 2]))
-print(a.flatten())
-print(a.transpose())
+print("Final loss:", loss_fn(model(x), y))
 ```
 
----
+## Installation
 
-# Current Capabilities
+Clone the repository:
 
-* ✅ N-dimensional tensors
-* ✅ Nested-list tensor construction
-* ✅ Shape & stride management
-* ✅ Broadcasting
-* ✅ Element-wise tensor operations
-* ✅ 2D Matrix Multiplication
-* ✅ Reshape
-* ✅ Flatten
-* ✅ 2D Transpose
-* ✅ Sum / Mean / Max reductions
-* ✅ CUDA memory pooling
-* ✅ Automatic GPU memory reuse
-* ✅ Shape validation
-* ✅ Ragged tensor validation
-* ✅ Move semantics
-* ✅ Readable tensor representation
+```powershell
+git clone https://github.com/YOUR_USERNAME/minipypy.git
+cd minipypy
+```
 
----
+Create and activate a virtual environment:
 
-# Installation
-
-## Install from Source
-
-```bash
-git clone https://github.com/mridul-afk/Minipypy.git
-cd Minipypy
-
+```powershell
 python -m venv venv
+.\venv\Scripts\activate
 ```
 
-Windows
+Install build dependencies:
 
-```bash
-venv\Scripts\activate
+```powershell
+pip install -U pip
+pip install -e .
 ```
 
-Linux / macOS
+Or use the project build script:
 
-```bash
-source venv/bin/activate
+```powershell
+.\build.ps1 -sync
 ```
 
-Install the package
+## Requirements
 
-```bash
-pip install .
-```
+MiniPyPy currently requires:
 
-MiniPyPy now supports modern Python packaging through **scikit-build-core**, automatically building the CUDA extension during installation.
-
----
-
-# Roadmap
-
-## v0.1.0
-
-* Tensor class
-* CUDA backend
-* Python bindings
-
-## v0.2.0
-
-* N-dimensional tensors
-* General 2D matrix multiplication
-* Shape & stride metadata
-
-## v0.3.0
-
-* CUDA memory pool
-* Shape validation
-* Shape preservation
-* Asynchronous CUDA execution
-
-## v0.4.0
-
-* Broadcasting
-* Reshape
-* Flatten
-* 2D Transpose
-* Sum / Mean / Max reductions
-* Nested-list tensor construction
-* N-dimensional tensor printing
-* Ragged tensor validation
-
-## v0.5.0
-
-* Automatic differentiation (Autograd)
-* Computational graph
-* Gradient propagation
-
-## v0.6.0
-
-* Neural network layers
-* Activation functions
-* Loss functions
-* Optimizers
-
-## v1.0.0
-
-* TensorFold integration
-* Tensor decomposition layers
-* Model compression
-* Training support
-
----
-
-# Tech Stack
-
-* C++17
-* CUDA
-* pybind11
+* Python 3.11
 * CMake
+* Ninja
+* Visual Studio Build Tools on Windows
+* NVIDIA CUDA Toolkit
+* pybind11
 * scikit-build-core
-* Python
 
----
+The current development setup uses CUDA 13.0.
 
-# Vision
+## Tensor API
 
-MiniPyPy is an educational deep learning framework built to explore how modern tensor libraries work internally.
+Create tensors:
 
-Rather than wrapping existing frameworks, MiniPyPy implements tensors, CUDA kernels, memory management, broadcasting, reductions, and eventually automatic differentiation completely from scratch.
+```python
+import minipypy as mini
 
-The long-term goal is to serve as the computational backend for **TensorFold**, a tensor-decomposition-based deep learning framework focused on efficient model compression and deployment.
+x = mini.Tensor([1.0, 2.0, 3.0])
+y = mini.Tensor([10.0, 20.0, 30.0])
+```
+
+Elementwise operations:
+
+```python
+z = x + y
+z = x - y
+z = x * y
+z = x / y
+```
+
+Scalar operations:
+
+```python
+z = x + 2.0
+z = 2.0 + x
+
+z = x - 2.0
+z = 2.0 - x
+
+z = x * 0.5
+z = 0.5 * x
+
+z = x / 2.0
+z = 8.0 / x
+```
+
+Move result to CPU:
+
+```python
+print(z.cpu())
+```
+
+## Autograd
+
+MiniPyPy supports reverse-mode autograd.
+
+```python
+x = mini.Tensor([1.0, 2.0, 3.0], requires_grad=True)
+
+y = x * x
+loss = y.sum()
+
+loss.backward()
+
+print(x.grad().cpu())
+```
+
+Expected output:
+
+```text
+[2.0, 4.0, 6.0]
+```
+
+Scalar operations also support autograd:
+
+```python
+x = mini.Tensor([1.0, 2.0, 3.0], requires_grad=True)
+
+y = x * 0.5
+loss = y.sum()
+
+loss.backward()
+
+print(x.grad().cpu())
+```
+
+Expected output:
+
+```text
+[0.5, 0.5, 0.5]
+```
+
+## Matmul
+
+```python
+a = mini.Tensor([[1.0, 2.0], [3.0, 4.0]], requires_grad=True)
+b = mini.Tensor([[10.0], [20.0]], requires_grad=True)
+
+c = a @ b
+loss = c.sum()
+
+loss.backward()
+
+print(a.grad())
+print(b.grad())
+```
+
+MiniPyPy supports 2D matmul and N-D broadcasted batched matmul.
+
+## ReLU
+
+ReLU is implemented as a CUDA-backed operation with autograd support.
+
+```python
+x = mini.Tensor([-2.0, -1.0, 0.0, 1.0, 2.0], requires_grad=True)
+
+y = x.relu()
+loss = y.sum()
+
+loss.backward()
+
+print(y.cpu())
+print(x.grad().cpu())
+```
+
+Expected output:
+
+```text
+[0.0, 0.0, 0.0, 1.0, 2.0]
+[0.0, 0.0, 0.0, 1.0, 1.0]
+```
+
+At `x = 0`, MiniPyPy uses gradient `0`.
+
+## Neural Network API
+
+MiniPyPy includes a small `mini.nn` package.
+
+Currently supported:
+
+```text
+mini.nn.Module
+mini.nn.Linear
+mini.nn.ReLU
+mini.nn.Sequential
+mini.nn.MSELoss
+mini.nn.HingeLoss
+```
+
+Functional API:
+
+```text
+mini.nn.functional.mse_loss
+mini.nn.functional.relu
+mini.nn.functional.hinge_loss
+```
+
+Optimizer API:
+
+```text
+mini.optim.SGD
+```
+
+## Linear Layer
+
+```python
+layer = mini.nn.Linear(3, 2)
+
+x = mini.Tensor([[1.0, 2.0, 3.0]])
+
+out = layer(x)
+```
+
+Internally:
+
+```text
+out = x @ W + b
+```
+
+## Sequential
+
+```python
+model = mini.nn.Sequential(
+    mini.nn.Linear(1, 4),
+    mini.nn.ReLU(),
+    mini.nn.Linear(4, 1),
+)
+
+out = model(x)
+```
+
+Sequential supports:
+
+```python
+model(x)
+model.parameters()
+model.zero_grad()
+model.step(lr)
+len(model)
+model[index]
+```
+
+## MSELoss
+
+```python
+loss_fn = mini.nn.MSELoss()
+
+pred = model(x)
+loss = loss_fn(pred, y)
+```
+
+Functional version:
+
+```python
+loss = mini.nn.functional.mse_loss(pred, y)
+```
+
+## HingeLoss
+
+HingeLoss is useful for binary classification-style objectives.
+
+Targets should be `-1` or `+1`.
+
+```python
+pred = mini.Tensor([[2.0], [-1.0], [0.5]], requires_grad=True)
+target = mini.Tensor([[1.0], [-1.0], [1.0]])
+
+loss = mini.nn.functional.hinge_loss(pred, target)
+
+loss.backward()
+
+print(loss)
+print(pred.grad())
+```
+
+Formula:
+
+```text
+loss = mean(relu(1 - target * pred))
+```
+
+Module version:
+
+```python
+loss_fn = mini.nn.HingeLoss()
+loss = loss_fn(pred, target)
+```
+
+## Optimizer
+
+MiniPyPy currently supports SGD:
+
+```python
+optimizer = mini.optim.SGD(model, lr=0.01)
+
+optimizer.zero_grad()
+loss.backward()
+optimizer.step()
+```
+
+Currently, `SGD` takes the model object directly because parameter updates replace tensors rather than mutating them in-place.
+
+## Tests
+
+Run the full test suite:
+
+```powershell
+python -m pytest tests/test_autograd.py tests/test_scalar_ops.py tests/test_training.py tests/test_nn.py tests/test_relu.py tests/test_sequential.py tests/test_optim.py tests/test_scalar_autograd.py tests/test_hinge_loss.py -v
+```
+
+Expected result for v0.8.2:
+
+```text
+51 passed
+```
+
+## Project Roadmap
+
+Near-term roadmap:
+
+```text
+v0.8.3 — Softmax CUDA Op
+v0.8.4 — CrossEntropyLoss
+v0.8.5 — sigmoid / exp / log / sqrt CUDA primitives
+v0.8.6 — Adam optimizer
+v0.9.0 — Train XOR / tiny MLP demo
+v0.10.0 — TensorFoldLinear prototype
+```
+
+Long-term goals:
+
+* More tensor ops
+* Better memory management
+* In-place optimizer updates
+* `no_grad()` context manager
+* More activation functions
+* More loss functions
+* Convolution layers
+* TensorFold low-rank layers
+* CUDA kernel optimization
+* cuBLAS/cuDNN integration
+
+## TensorFold Direction
+
+The long-term research goal is to integrate TensorFold layers into MiniPyPy.
+
+Instead of only using normal dense layers like:
+
+```text
+y = xW + b
+```
+
+MiniPyPy will eventually support low-rank dense replacements:
+
+```python
+model = mini.nn.Sequential(
+    mini.nn.TensorFoldLinear(784, 256, rank=8),
+    mini.nn.ReLU(),
+    mini.nn.TensorFoldLinear(256, 10, rank=4),
+)
+```
+
+The goal is to reduce parameter count and memory usage while keeping training and inference GPU-backed.
+
+## Known Limitations
+
+MiniPyPy is still experimental.
+
+Current limitations:
+
+* No Adam optimizer yet
+* No softmax or cross entropy yet
+* No sigmoid, tanh, exp, log, or sqrt yet
+* No convolution layers yet
+* No TensorFold layers yet
+* No `no_grad()` context manager yet
+* Parameter updates currently replace tensors instead of mutating them in-place
+* API and internals may change frequently
+
+## License
+
+Add your license here.
+
+## Status
+
+MiniPyPy is under active development.
+
+Current milestone:
+
+```text
+Tensor + Autograd + mini.nn + ReLU + Sequential + SGD + HingeLoss
+```
