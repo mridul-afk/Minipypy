@@ -75,6 +75,16 @@ public:
    Tensor &requires_grad_(bool value = true);
 
    // ACTIVATION FUNCTIONS
-
    Tensor relu() const;
+
+   // SCALAR FUNCTIONS
+   Tensor operator+(float scalar) const;
+   Tensor operator-(float scalar) const;
+   Tensor operator*(float scalar) const;
+   Tensor operator/(float scalar) const;
 };
+
+Tensor operator+(float scalar, const Tensor &t);
+Tensor operator-(float scalar, const Tensor &t);
+Tensor operator*(float scalar, const Tensor &t);
+Tensor operator/(float scalar, const Tensor &t);

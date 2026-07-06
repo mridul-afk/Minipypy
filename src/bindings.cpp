@@ -166,77 +166,64 @@ PYBIND11_MODULE(_C, m)
         .def("zero_grad", &Tensor::zero_grad)
         .def("backward", &Tensor::backward)
 
-        .def("__add__",
-             [](const Tensor &a, const Tensor &b)
-             {
-                 return a + b;
-             })
+        /*
+          Tensor-Tensor operators.
+          These call the C++ Tensor operators, which create autograd nodes.
+        */
+        .def("__add__", [](const Tensor &a, const Tensor &b)
+             { return a + b; }, py::is_operator())
 
-        .def("__add__",
-             [](const Tensor &a, float scalar)
-             {
-                 return a.add_scalar(scalar);
-             })
+        .def("__sub__", [](const Tensor &a, const Tensor &b)
+             { return a - b; }, py::is_operator())
 
-        .def("__radd__",
-             [](const Tensor &a, float scalar)
-             {
-                 return a.add_scalar(scalar);
-             })
-        .def("__mul__",
-             [](const Tensor &a, const Tensor &b)
-             {
-                 return a * b;
-             })
+        .def("__mul__", [](const Tensor &a, const Tensor &b)
+             { return a * b; }, py::is_operator())
 
-        .def("__mul__",
-             [](const Tensor &a, float scalar)
-             {
-                 return a.mul_scalar(scalar);
-             })
+        .def("__truediv__", [](const Tensor &a, const Tensor &b)
+             { return a / b; }, py::is_operator())
 
-        .def("__rmul__",
-             [](const Tensor &a, float scalar)
-             {
-                 return a.mul_scalar(scalar);
-             })
-        .def("__sub__",
-             [](const Tensor &a, const Tensor &b)
-             {
-                 return a - b;
-             })
+        /*
+          Autograd-safe scalar operators.
 
-        .def("__sub__",
-             [](const Tensor &a, float scalar)
-             {
-                 return a.sub_scalar(scalar);
-             })
+          Important:
+          Do NOT call add_scalar/mul_scalar/sub_scalar/div_scalar here.
+          Those methods are forward-only utility kernels and do not attach grad_fn.
 
-        .def("__rsub__",
-             [](const Tensor &a, float scalar)
-             {
-                 return a.rsub_scalar(scalar);
-             })
-        .def("__truediv__",
-             [](const Tensor &a, const Tensor &b)
-             {
-                 return a / b;
-             })
+          These overloads call:
+              Tensor::operator+(float)
+              Tensor::operator-(float)
+              Tensor::operator*(float)
+              Tensor::operator/(float)
 
-        .def("__truediv__",
-             [](const Tensor &a, float scalar)
-             {
-                 return a.div_scalar(scalar);
-             })
+          In tensor.cpp, those convert the scalar into Tensor([scalar]) and reuse
+          tensor-tensor ops, so scalar expressions participate in autograd.
+        */
+        .def("__add__", [](const Tensor &a, float scalar)
+             { return a + scalar; }, py::is_operator())
 
-        .def("__rtruediv__",
-             [](const Tensor &a, float scalar)
-             {
-                 return a.rdiv_scalar(scalar);
-             })
+        .def("__radd__", [](const Tensor &a, float scalar)
+             { return scalar + a; }, py::is_operator())
+
+        .def("__sub__", [](const Tensor &a, float scalar)
+             { return a - scalar; }, py::is_operator())
+
+        .def("__rsub__", [](const Tensor &a, float scalar)
+             { return scalar - a; }, py::is_operator())
+
+        .def("__mul__", [](const Tensor &a, float scalar)
+             { return a * scalar; }, py::is_operator())
+
+        .def("__rmul__", [](const Tensor &a, float scalar)
+             { return scalar * a; }, py::is_operator())
+
+        .def("__truediv__", [](const Tensor &a, float scalar)
+             { return a / scalar; }, py::is_operator())
+
+        .def("__rtruediv__", [](const Tensor &a, float scalar)
+             { return scalar / a; }, py::is_operator())
 
         .def("matmul", &Tensor::matmul)
-        .def("__matmul__", &Tensor::matmul)
+        .def("__matmul__", &Tensor::matmul, py::is_operator())
         .def("reshape", &Tensor::reshape)
         .def("flatten", &Tensor::flatten)
         .def("transpose", &Tensor::transpose)
@@ -246,16 +233,20 @@ PYBIND11_MODULE(_C, m)
         .def("max", &Tensor::max)
         .def("sum_to_shape", &Tensor::sum_to_shape)
         .def("clone", &Tensor::clone)
-        .def("mul_scalar", &Tensor::mul_scalar)
-        .def("add_scalar", &Tensor::add_scalar)
-        .def("sub_scalar", &Tensor::sub_scalar)
-        .def("rsub_scalar", &Tensor::rsub_scalar)
-        .def("div_scalar", &Tensor::div_scalar)
-        .def("rdiv_scalar", &Tensor::rdiv_scalar)
+
+        /*
+          Do not expose forward-only scalar helper methods such as:
+              mul_scalar, add_scalar, sub_scalar, rsub_scalar, div_scalar, rdiv_scalar
+
+          Users should use normal operators instead:
+              x * 0.5
+              2.0 - x
+              8.0 / x
+
+          Those operators are now autograd-safe.
+        */
         .def("detach", &Tensor::detach)
-        .def("requires_grad_", &Tensor::requires_grad_,
-             py::arg("value") = true,
-             py::return_value_policy::reference_internal)
+        .def("requires_grad_", &Tensor::requires_grad_, py::arg("value") = true, py::return_value_policy::reference_internal)
         .def("relu", &Tensor::relu)
 
         .def("__repr__", [](const Tensor &t)

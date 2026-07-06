@@ -11,7 +11,51 @@ static void add_parent_to_node(
     std::shared_ptr<AutogradNode> node,
     const Tensor &t)
 {
-  if (t.grad_fn)
+  /*
+    Autograd parent ownership rule:
+
+    1. If t is a real trainable leaf tensor:
+         requires_grad == true
+         grad_fn == nullptr
+
+       Then we keep the original pointer.
+       This is important because gradients must accumulate into the real tensor
+       owned by the user/model.
+
+       Example:
+         W = Tensor(..., requires_grad=True)
+         out = x @ W
+
+       W.grad must be updated on the original W object.
+
+    2. If t is an intermediate tensor:
+         grad_fn != nullptr
+
+       Then it may be a temporary expression like:
+         x @ W
+         x.relu()
+         a + b
+
+       We must save a copy inside AutogradNode, otherwise the temporary can die
+       before backward runs.
+
+    3. If t is a constant tensor:
+         requires_grad == false
+
+       This happens for scalar ops after we convert:
+         x * 0.5
+
+       into:
+         x * Tensor([0.5])
+
+       That scalar Tensor is temporary, but backward still needs its value.
+       Example:
+         d(x * 0.5)/dx = 0.5
+
+       So constant temporary tensors must also be saved.
+  */
+
+  if (t.grad_fn || !t.requires_grad)
   {
     Tensor saved(t.cpu(), t.shape, t.requires_grad);
     saved.grad_fn = t.grad_fn;
@@ -698,6 +742,148 @@ Tensor Tensor::operator/(const Tensor &other) const
   }
 
   return out;
+}
+
+/*
+  Helper used by scalar operators.
+
+  Instead of implementing separate forward-only scalar kernels like:
+      x * 0.5
+
+  we convert the scalar into a tiny Tensor:
+      Tensor([0.5], shape=[1])
+
+  Then we reuse the existing tensor-tensor operators:
+      x * Tensor([0.5])
+
+  Why this is important:
+    - tensor-tensor ops already create autograd nodes
+    - broadcasting backward already works
+    - scalar constants are saved inside AutogradNode by add_parent_to_node()
+*/
+static Tensor scalar_tensor(float scalar)
+{
+  return Tensor(std::vector<float>{scalar}, std::vector<int>{1}, false);
+}
+
+Tensor Tensor::operator+(float scalar) const
+{
+  /*
+    x + scalar
+
+    Internally:
+      x + Tensor([scalar])
+
+    Gradient:
+      d(x + c)/dx = 1
+  */
+  Tensor s = scalar_tensor(scalar);
+  return (*this) + s;
+}
+
+Tensor Tensor::operator-(float scalar) const
+{
+  /*
+    x - scalar
+
+    Internally:
+      x - Tensor([scalar])
+
+    Gradient:
+      d(x - c)/dx = 1
+  */
+  Tensor s = scalar_tensor(scalar);
+  return (*this) - s;
+}
+
+Tensor Tensor::operator*(float scalar) const
+{
+  /*
+    x * scalar
+
+    Internally:
+      x * Tensor([scalar])
+
+    Gradient:
+      d(x * c)/dx = c
+  */
+  Tensor s = scalar_tensor(scalar);
+  return (*this) * s;
+}
+
+Tensor Tensor::operator/(float scalar) const
+{
+  /*
+    x / scalar
+
+    Internally:
+      x / Tensor([scalar])
+
+    Gradient:
+      d(x / c)/dx = 1 / c
+  */
+  Tensor s = scalar_tensor(scalar);
+  return (*this) / s;
+}
+
+Tensor operator+(float scalar, const Tensor &t)
+{
+  /*
+    scalar + x
+
+    Internally:
+      Tensor([scalar]) + x
+
+    Gradient:
+      d(c + x)/dx = 1
+  */
+  Tensor s = scalar_tensor(scalar);
+  return s + t;
+}
+
+Tensor operator-(float scalar, const Tensor &t)
+{
+  /*
+    scalar - x
+
+    Internally:
+      Tensor([scalar]) - x
+
+    Gradient:
+      d(c - x)/dx = -1
+  */
+  Tensor s = scalar_tensor(scalar);
+  return s - t;
+}
+
+Tensor operator*(float scalar, const Tensor &t)
+{
+  /*
+    scalar * x
+
+    Internally:
+      Tensor([scalar]) * x
+
+    Gradient:
+      d(c * x)/dx = c
+  */
+  Tensor s = scalar_tensor(scalar);
+  return s * t;
+}
+
+Tensor operator/(float scalar, const Tensor &t)
+{
+  /*
+    scalar / x
+
+    Internally:
+      Tensor([scalar]) / x
+
+    Gradient:
+      d(c / x)/dx = -c / x^2
+  */
+  Tensor s = scalar_tensor(scalar);
+  return s / t;
 }
 
 Tensor Tensor::matmul(const Tensor &other) const
