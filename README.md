@@ -370,7 +370,6 @@ Expected result for v0.8.2:
 Near-term roadmap:
 
 ```text
-v0.8.3 — Softmax CUDA Op
 v0.8.4 — CrossEntropyLoss
 v0.8.5 — sigmoid / exp / log / sqrt CUDA primitives
 v0.8.6 — Adam optimizer
@@ -420,7 +419,6 @@ MiniPyPy is still experimental.
 Current limitations:
 
 * No Adam optimizer yet
-* No softmax or cross entropy yet
 * No sigmoid, tanh, exp, log, or sqrt yet
 * No convolution layers yet
 * No TensorFold layers yet
