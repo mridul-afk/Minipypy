@@ -20,3 +20,6 @@ def hinge_loss(pred, target):
 
 def softmax(x, dim = -1):
     return x.softmax(dim)
+
+def cross_entropy(logits, target):
+    return logits.cross_entropy(target)

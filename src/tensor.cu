@@ -1170,3 +1170,129 @@ void launch_softmax_forward(
       softmax_size,
       inner_size);
 }
+
+__global__ void cross_entropy_forward_kernel(
+    const float *logits,
+    const float *target,
+    float *loss,
+    int batch_size,
+    int num_classes)
+{
+  /*
+  Stable CrossEntropyLoss forward.
+
+  logits shape:
+    [batch_size, num_classes]
+
+  target shape:
+    [batch_size] or [batch_size, 1]
+
+  For each sample i:
+    loss_i = -logit[target_i] + max_logit
+             + log(sum_j exp(logit_j - max_logit))
+
+  Final output:
+    mean(loss_i)
+*/
+
+  int sample = blockIdx.x;
+
+  if (sample >= batch_size)
+    return;
+
+  int tid = threadIdx.x;
+  int base = sample * num_classes;
+
+  int label = static_cast<int>(target[sample]);
+  /*
+    Step 1:
+    Find max logit for numerical stability.
+  */
+  float local_max = -FLT_MAX;
+
+  for (int j = tid; j < num_classes; j += blockDim.x)
+  {
+    float v = logits[base + j];
+
+    if (v > local_max)
+      local_max = v;
+  }
+
+  __shared__ float shared_max[256];
+  shared_max[tid] = local_max;
+  __syncthreads();
+
+  for (int stride = blockDim.x / 2; stride > 0; stride >>= 1)
+  {
+    if (tid < stride)
+    {
+      if (shared_max[tid + stride] > shared_max[tid])
+        shared_max[tid] = shared_max[tid + stride];
+    }
+
+    __syncthreads();
+  }
+
+  float max_logit = shared_max[0];
+
+  /*
+    Step 2:
+    Compute sum_j exp(logit_j - max_logit)
+  */
+  float local_sum = 0.0f;
+
+  for (int j = tid; j < num_classes; j += blockDim.x)
+  {
+    local_sum += expf(logits[base + j] - max_logit);
+  }
+
+  __shared__ float shared_sum[256];
+  shared_sum[tid] = local_sum;
+  __syncthreads();
+
+  for (int stride = blockDim.x / 2; stride > 0; stride >>= 1)
+  {
+    if (tid < stride)
+    {
+      shared_sum[tid] += shared_sum[tid + stride];
+    }
+
+    __syncthreads();
+  }
+
+  float sum_exp = shared_sum[0];
+
+  /*
+    Step 3:
+    Compute sample loss and add mean contribution.
+  */
+  if (tid == 0)
+  {
+    float correct_logit = logits[base + label];
+
+    float sample_loss =
+        -correct_logit + max_logit + logf(sum_exp);
+
+    atomicAdd(loss, sample_loss / static_cast<float>(batch_size));
+  }
+}
+
+void launch_cross_entropy_forward(
+    const float *logits,
+    const float *target,
+    float *loss,
+    int batch_size,
+    int num_classes)
+{
+  cudaMemset(loss, 0, sizeof(float));
+
+  int threads = 256;
+  int blocks = batch_size;
+
+  cross_entropy_forward_kernel<<<blocks, threads>>>(
+      logits,
+      target,
+      loss,
+      batch_size,
+      num_classes);
+}

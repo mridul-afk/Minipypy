@@ -77,6 +77,7 @@ public:
    // ACTIVATION FUNCTIONS
    Tensor relu() const;
    Tensor softmax(int dim = -1) const;
+   Tensor cross_entropy(const Tensor &target) const;
 
    // SCALAR FUNCTIONS
    Tensor operator+(float scalar) const;

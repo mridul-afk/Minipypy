@@ -1,4 +1,6 @@
 #include <cuda_runtime.h>
+#include <float.h>
+#include <math.h>
 
 __global__ void fill_kernel(float *data, float value, int size)
 {
@@ -344,4 +346,133 @@ void launch_softmax_backward(
         outer_size,
         softmax_size,
         inner_size);
+}
+
+__global__ void cross_entropy_backward_kernel(
+    const float *logits,
+    const float *target,
+    const float *grad_out,
+    float *grad_logits,
+    int batch_size,
+    int num_classes)
+{
+    /*
+      CrossEntropyLoss backward.
+
+      Forward:
+        loss = mean_i cross_entropy(logits_i, target_i)
+
+      Backward:
+        grad_logits[i, j] =
+          (softmax(logits[i, j]) - one_hot(target_i, j)) / batch_size
+
+      Also multiply by grad_out[0], so this works if the loss is used
+      inside a larger expression.
+    */
+
+    int sample = blockIdx.x;
+
+    if (sample >= batch_size)
+        return;
+
+    int tid = threadIdx.x;
+    int base = sample * num_classes;
+
+    int label = static_cast<int>(target[sample]);
+
+    /*
+      Step 1:
+      Find max logit for numerical stability.
+    */
+    float local_max = -FLT_MAX;
+
+    for (int j = tid; j < num_classes; j += blockDim.x)
+    {
+        float v = logits[base + j];
+
+        if (v > local_max)
+            local_max = v;
+    }
+
+    __shared__ float shared_max[256];
+    shared_max[tid] = local_max;
+    __syncthreads();
+
+    for (int stride = blockDim.x / 2; stride > 0; stride >>= 1)
+    {
+        if (tid < stride)
+        {
+            if (shared_max[tid + stride] > shared_max[tid])
+                shared_max[tid] = shared_max[tid + stride];
+        }
+
+        __syncthreads();
+    }
+
+    float max_logit = shared_max[0];
+
+    /*
+      Step 2:
+      Compute sum exp(logit - max).
+    */
+    float local_sum = 0.0f;
+
+    for (int j = tid; j < num_classes; j += blockDim.x)
+    {
+        local_sum += expf(logits[base + j] - max_logit);
+    }
+
+    __shared__ float shared_sum[256];
+    shared_sum[tid] = local_sum;
+    __syncthreads();
+
+    for (int stride = blockDim.x / 2; stride > 0; stride >>= 1)
+    {
+        if (tid < stride)
+        {
+            shared_sum[tid] += shared_sum[tid + stride];
+        }
+
+        __syncthreads();
+    }
+
+    float sum_exp = shared_sum[0];
+
+    /*
+      Step 3:
+      Write gradient for each class.
+    */
+    for (int j = tid; j < num_classes; j += blockDim.x)
+    {
+        float prob = expf(logits[base + j] - max_logit) / sum_exp;
+
+        float one_hot = (j == label) ? 1.0f : 0.0f;
+
+        float grad =
+            grad_out[0] *
+            (prob - one_hot) /
+            static_cast<float>(batch_size);
+
+        atomicAdd(&grad_logits[base + j], grad);
+    }
+}
+
+void launch_cross_entropy_backward(
+    const float *logits,
+    const float *target,
+    const float *grad_out,
+    float *grad_logits,
+    int batch_size,
+    int num_classes)
+{
+    int threads = 256;
+    int blocks = batch_size;
+
+    cross_entropy_backward_kernel<<<blocks, threads>>>(
+        logits,
+        target,
+        grad_out,
+        grad_logits,
+        batch_size,
+        num_classes);
 }

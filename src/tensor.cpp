@@ -234,6 +234,13 @@ void launch_softmax_forward(
     int softmax_size,
     int inner_size);
 
+void launch_cross_entropy_forward(
+    const float *logits,
+    const float *target,
+    float *loss,
+    int batch_size,
+    int num_classes);
+
 std::vector<int> broadcast_shape(
     const std::vector<int> &a,
     const std::vector<int> &b)
@@ -1430,6 +1437,113 @@ Tensor Tensor::softmax(int dim) const
 
     out.grad_fn->saved_tensors.push_back(
         std::make_shared<Tensor>(std::move(saved_out)));
+  }
+
+  return out;
+}
+
+Tensor Tensor::cross_entropy(const Tensor &target) const
+{
+  /*
+    CrossEntropyLoss for classification.
+
+    Expected shapes:
+      logits: [batch, classes]
+      target: [batch] or [batch, 1]
+
+    Target values are class indices stored as floats:
+      0.0, 1.0, 2.0, ...
+
+    Output:
+      scalar tensor with shape [1]
+
+    This is a fused stable implementation.
+    It does NOT compute log(softmax(x)) directly.
+  */
+
+  if (this->shape.size() != 2)
+  {
+    throw std::runtime_error("cross_entropy expects logits with shape [batch, classes]");
+  }
+
+  int batch_size = this->shape[0];
+  int num_classes = this->shape[1];
+
+  bool valid_target_shape = false;
+
+  if (target.shape.size() == 1 && target.shape[0] == batch_size)
+  {
+    valid_target_shape = true;
+  }
+
+  if (target.shape.size() == 2 &&
+      target.shape[0] == batch_size &&
+      target.shape[1] == 1)
+  {
+    valid_target_shape = true;
+  }
+
+  if (!valid_target_shape)
+  {
+    throw std::runtime_error("cross_entropy target must have shape [batch] or [batch, 1]");
+  }
+
+  if (target.requires_grad)
+  {
+    throw std::runtime_error("cross_entropy target must not require grad");
+  }
+
+  /*
+    Validate target labels on CPU for clear error messages.
+
+    The CUDA kernel assumes labels are valid class indices.
+  */
+  std::vector<float> target_host = target.cpu();
+
+  for (int i = 0; i < batch_size; i++)
+  {
+    int label = static_cast<int>(target_host[i]);
+
+    if (label < 0 || label >= num_classes)
+    {
+      throw std::runtime_error("cross_entropy target label out of range");
+    }
+
+    if (static_cast<float>(label) != target_host[i])
+    {
+      throw std::runtime_error("cross_entropy target labels must be integer class indices");
+    }
+  }
+
+  Tensor out(std::vector<int>{1}, this->requires_grad);
+
+  launch_cross_entropy_forward(
+      this->d_data,
+      target.d_data,
+      out.d_data,
+      batch_size,
+      num_classes);
+
+  if (this->requires_grad)
+  {
+    out.grad_fn = std::make_shared<AutogradNode>();
+    out.grad_fn->op = OpType::CROSS_ENTROPY;
+
+    /*
+      Parent 0 is logits.
+      Gradients flow only into logits, not target labels.
+    */
+    add_parent_to_node(out.grad_fn, *this);
+
+    /*
+      Save target labels because backward needs them.
+
+      We save a copy because the target tensor may be temporary.
+    */
+    Tensor saved_target(target.cpu(), target.shape, false);
+
+    out.grad_fn->saved_tensors.push_back(
+        std::make_shared<Tensor>(std::move(saved_target)));
   }
 
   return out;

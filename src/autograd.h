@@ -17,7 +17,8 @@ enum class OpType
     MEAN,
     MATMUL,
     RELU,
-    SOFTMAX
+    SOFTMAX,
+    CROSS_ENTROPY
 };
 
 struct AutogradNode

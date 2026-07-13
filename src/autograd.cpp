@@ -20,6 +20,14 @@ void launch_softmax_backward(
     int softmax_size,
     int inner_size);
 
+void launch_cross_entropy_backward(
+    const float *logits,
+    const float *target,
+    const float *grad_out,
+    float *grad_logits,
+    int batch_size,
+    int num_classes);
+
 Tensor Tensor::grad() const
 {
   if (!grad_tensor)
@@ -375,6 +383,40 @@ void Tensor::backward()
             outer_size,
             softmax_size,
             inner_size);
+      }
+    }
+    else if (tensor->grad_fn->op == OpType::CROSS_ENTROPY)
+    {
+      Tensor *logits = tensor->grad_fn->parents[0];
+
+      if (logits && logits->requires_grad)
+      {
+        if (logits->shape.size() != 2)
+        {
+          throw std::runtime_error("cross_entropy backward expects logits with shape [batch, classes]");
+        }
+
+        int batch_size = logits->shape[0];
+        int num_classes = logits->shape[1];
+
+        if (tensor->grad_fn->saved_tensors.empty())
+        {
+          throw std::runtime_error("cross_entropy backward missing saved target");
+        }
+
+        /*
+          The saved target is pushed after add_parent_to_node().
+          Use back() because add_parent_to_node() may save intermediate parents.
+        */
+        Tensor *target = tensor->grad_fn->saved_tensors.back().get();
+
+        launch_cross_entropy_backward(
+            logits->d_data,
+            target->d_data,
+            tensor->grad_tensor->d_data,
+            logits->grad_tensor->d_data,
+            batch_size,
+            num_classes);
       }
     }
   }
