@@ -12,20 +12,32 @@ MiniPyPy currently supports:
 * Python bindings through pybind11
 * Elementwise tensor operations
 * Broadcasting
-* Scalar tensor operations
+* Scalar tensor operations with autograd
 * Reverse-mode autograd
-* Matmul forward/backward
+* 2D matmul forward/backward
+* N-D broadcasted batched matmul forward/backward
 * ReLU forward/backward
+* N-D Softmax forward/backward
+* Fused CrossEntropyLoss forward/backward
+* Fused BCEWithLogitsLoss forward/backward
 * Basic neural network modules
 * Sequential models
 * SGD optimizer
 * MSELoss
 * HingeLoss
+* CrossEntropyLoss
+* BCEWithLogitsLoss
 
 Latest milestone:
 
 ```text
-v0.8.2 — Scalar Autograd and HingeLoss
+v0.8.5 — BCEWithLogitsLoss
+```
+
+Full test suite:
+
+```text
+75 passed
 ```
 
 ## Example
@@ -61,8 +73,8 @@ print("Final loss:", loss_fn(model(x), y))
 Clone the repository:
 
 ```powershell
-git clone https://github.com/YOUR_USERNAME/minipypy.git
-cd minipypy
+git clone https://github.com/mridul-afk/Minipypy.git
+cd Minipypy
 ```
 
 Create and activate a virtual environment:
@@ -72,7 +84,7 @@ python -m venv venv
 .\venv\Scripts\activate
 ```
 
-Install build dependencies:
+Install in editable mode:
 
 ```powershell
 pip install -U pip
@@ -110,6 +122,21 @@ x = mini.Tensor([1.0, 2.0, 3.0])
 y = mini.Tensor([10.0, 20.0, 30.0])
 ```
 
+Create tensors with gradients:
+
+```python
+x = mini.Tensor([1.0, 2.0, 3.0], requires_grad=True)
+```
+
+Create N-D tensors from nested Python lists:
+
+```python
+x = mini.Tensor([
+    [1.0, 2.0],
+    [3.0, 4.0],
+])
+```
+
 Elementwise operations:
 
 ```python
@@ -139,6 +166,14 @@ Move result to CPU:
 
 ```python
 print(z.cpu())
+```
+
+Inspect tensor metadata:
+
+```python
+print(x.shape())
+print(x.ndim())
+print(x.numel())
 ```
 
 ## Autograd
@@ -181,6 +216,24 @@ Expected output:
 [0.5, 0.5, 0.5]
 ```
 
+Clear gradients:
+
+```python
+x.zero_grad()
+```
+
+Detach a tensor from the graph:
+
+```python
+y = x.detach()
+```
+
+Enable gradients on a tensor:
+
+```python
+x = x.requires_grad_(True)
+```
+
 ## Matmul
 
 ```python
@@ -197,6 +250,27 @@ print(b.grad())
 ```
 
 MiniPyPy supports 2D matmul and N-D broadcasted batched matmul.
+
+Example:
+
+```python
+a = mini.Tensor([
+    [
+        [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]],
+        [[1.0, 0.0, 1.0], [2.0, 1.0, 0.0]],
+    ]
+])
+
+b = mini.Tensor([
+    [
+        [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]],
+        [[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]],
+    ]
+])
+
+out = a @ b
+print(out.shape())
+```
 
 ## ReLU
 
@@ -223,6 +297,39 @@ Expected output:
 
 At `x = 0`, MiniPyPy uses gradient `0`.
 
+## Softmax
+
+Softmax is implemented as a CUDA-backed N-D operation with autograd support.
+
+```python
+x = mini.Tensor([[1.0, 2.0, 3.0]], requires_grad=True)
+
+y = x.softmax(dim=1)
+
+print(y.cpu())
+```
+
+Functional API:
+
+```python
+y = mini.nn.functional.softmax(x, dim=1)
+```
+
+Module API:
+
+```python
+softmax = mini.nn.Softmax(dim=1)
+y = softmax(x)
+```
+
+Softmax supports positive and negative dimensions:
+
+```python
+x.softmax(dim=0)
+x.softmax(dim=1)
+x.softmax(dim=-1)
+```
+
 ## Neural Network API
 
 MiniPyPy includes a small `mini.nn` package.
@@ -233,9 +340,12 @@ Currently supported:
 mini.nn.Module
 mini.nn.Linear
 mini.nn.ReLU
+mini.nn.Softmax
 mini.nn.Sequential
 mini.nn.MSELoss
 mini.nn.HingeLoss
+mini.nn.CrossEntropyLoss
+mini.nn.BCEWithLogitsLoss
 ```
 
 Functional API:
@@ -243,7 +353,10 @@ Functional API:
 ```text
 mini.nn.functional.mse_loss
 mini.nn.functional.relu
+mini.nn.functional.softmax
 mini.nn.functional.hinge_loss
+mini.nn.functional.cross_entropy
+mini.nn.functional.binary_cross_entropy_with_logits
 ```
 
 Optimizer API:
@@ -306,6 +419,12 @@ Functional version:
 loss = mini.nn.functional.mse_loss(pred, y)
 ```
 
+Formula:
+
+```text
+loss = mean((pred - target)^2)
+```
+
 ## HingeLoss
 
 HingeLoss is useful for binary classification-style objectives.
@@ -337,6 +456,126 @@ loss_fn = mini.nn.HingeLoss()
 loss = loss_fn(pred, target)
 ```
 
+## CrossEntropyLoss
+
+CrossEntropyLoss is used for multi-class classification.
+
+Expected shapes:
+
+```text
+logits: [batch, classes]
+target: [batch] or [batch, 1]
+```
+
+Targets are class indices stored as float tensors:
+
+```python
+target = mini.Tensor([2.0, 0.0, 1.0])
+```
+
+Example:
+
+```python
+logits = mini.Tensor([
+    [1.0, 2.0, 3.0],
+    [3.0, 1.0, 2.0],
+], requires_grad=True)
+
+target = mini.Tensor([2.0, 0.0])
+
+loss = mini.nn.functional.cross_entropy(logits, target)
+
+loss.backward()
+
+print(loss.cpu())
+print(logits.grad().cpu())
+```
+
+Module version:
+
+```python
+loss_fn = mini.nn.CrossEntropyLoss()
+loss = loss_fn(logits, target)
+```
+
+MiniPyPy implements CrossEntropyLoss as a fused stable CUDA operation using:
+
+```text
+loss_i = -logit_correct + max_logit + log(sum_j exp(logit_j - max_logit))
+```
+
+The backward formula is:
+
+```text
+grad_logits = (softmax(logits) - one_hot(target)) / batch_size
+```
+
+## BCEWithLogitsLoss
+
+BCEWithLogitsLoss is used for binary classification and multi-label classification.
+
+Expected shape rule:
+
+```text
+logits.shape == target.shape
+```
+
+Targets must contain:
+
+```text
+0.0 or 1.0
+```
+
+Example:
+
+```python
+logits = mini.Tensor([2.0, -1.0, 0.0], requires_grad=True)
+target = mini.Tensor([1.0, 0.0, 1.0])
+
+loss = mini.nn.functional.binary_cross_entropy_with_logits(logits, target)
+
+loss.backward()
+
+print(loss.cpu())
+print(logits.grad().cpu())
+```
+
+Module version:
+
+```python
+loss_fn = mini.nn.BCEWithLogitsLoss()
+loss = loss_fn(logits, target)
+```
+
+MiniPyPy implements BCEWithLogitsLoss as a fused stable CUDA operation using:
+
+```text
+loss = max(x, 0) - x * y + log(1 + exp(-abs(x)))
+```
+
+The backward formula is:
+
+```text
+grad_logits = (sigmoid(logits) - target) / num_elements
+```
+
+Multi-label example:
+
+```python
+logits = mini.Tensor([
+    [2.0, -1.0, 0.0],
+    [-2.0, 3.0, 1.0],
+], requires_grad=True)
+
+target = mini.Tensor([
+    [1.0, 0.0, 1.0],
+    [0.0, 1.0, 1.0],
+])
+
+loss = mini.nn.BCEWithLogitsLoss()(logits, target)
+loss.backward()
+```
+
 ## Optimizer
 
 MiniPyPy currently supports SGD:
@@ -356,13 +595,13 @@ Currently, `SGD` takes the model object directly because parameter updates repla
 Run the full test suite:
 
 ```powershell
-python -m pytest tests/test_autograd.py tests/test_scalar_ops.py tests/test_training.py tests/test_nn.py tests/test_relu.py tests/test_sequential.py tests/test_optim.py tests/test_scalar_autograd.py tests/test_hinge_loss.py -v
+python -m pytest tests/test_autograd.py tests/test_scalar_ops.py tests/test_training.py tests/test_nn.py tests/test_relu.py tests/test_sequential.py tests/test_optim.py tests/test_scalar_autograd.py tests/test_hinge_loss.py tests/test_softmax.py tests/test_cross_entropy_loss.py tests/test_bce_with_logits_loss.py -v
 ```
 
-Expected result for v0.8.2:
+Expected result for v0.8.5:
 
 ```text
-51 passed
+75 passed
 ```
 
 ## Project Roadmap
@@ -370,10 +609,9 @@ Expected result for v0.8.2:
 Near-term roadmap:
 
 ```text
-v0.8.4 — CrossEntropyLoss
-v0.8.5 — sigmoid / exp / log / sqrt CUDA primitives
-v0.8.6 — Adam optimizer
-v0.9.0 — Train XOR / tiny MLP demo
+v0.9.0 — MNIST Linear Classifier
+v0.9.1 — Accuracy / argmax helper utilities
+v0.9.2 — Better training examples and benchmarks
 v0.10.0 — TensorFoldLinear prototype
 ```
 
@@ -385,6 +623,8 @@ Long-term goals:
 * `no_grad()` context manager
 * More activation functions
 * More loss functions
+* Adam optimizer
+* Sigmoid, tanh, exp, log, and sqrt primitives
 * Convolution layers
 * TensorFold low-rank layers
 * CUDA kernel optimization
@@ -419,16 +659,19 @@ MiniPyPy is still experimental.
 Current limitations:
 
 * No Adam optimizer yet
-* No sigmoid, tanh, exp, log, or sqrt yet
+* No sigmoid, tanh, exp, log, or sqrt primitive APIs yet
 * No convolution layers yet
 * No TensorFold layers yet
 * No `no_grad()` context manager yet
+* No true integer tensor dtype yet
+* CrossEntropyLoss currently supports only `[batch, classes]` logits
 * Parameter updates currently replace tensors instead of mutating them in-place
+* Some internal cloning paths still use CPU roundtrips and can be optimized later
 * API and internals may change frequently
 
 ## License
 
-Add your license here.
+MIT License
 
 ## Status
 
@@ -437,5 +680,5 @@ MiniPyPy is under active development.
 Current milestone:
 
 ```text
-Tensor + Autograd + mini.nn + ReLU + Sequential + SGD + HingeLoss
+Tensor + Autograd + mini.nn + ReLU + Softmax + Sequential + SGD + HingeLoss + CrossEntropyLoss + BCEWithLogitsLoss
 ```
