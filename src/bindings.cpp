@@ -250,6 +250,7 @@ PYBIND11_MODULE(_C, m)
         .def("relu", &Tensor::relu)
         .def("softmax", &Tensor::softmax, py::arg("dim") = -1)
         .def("cross_entropy", &Tensor::cross_entropy, py::arg("target"))
+        .def("bce_with_logits", &Tensor::bce_with_logits, py::arg("target"))
 
         .def("__repr__", [](const Tensor &t)
              {

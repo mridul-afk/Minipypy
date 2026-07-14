@@ -1296,3 +1296,43 @@ void launch_cross_entropy_forward(
       batch_size,
       num_classes);
 }
+
+__global__ void bce_with_logits_forward_kernel(
+    const float *logits,
+    const float *target,
+    float *loss,
+    int size)
+{
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+  if (idx >= size)
+    return;
+
+  float x = logits[idx];
+  float y = target[idx];
+
+  float max_val = x > 0.0f ? x : 0.0f;
+  float abs_x = fabsf(x);
+
+  float element_loss = max_val - x * y + logf(1.0f + expf(-abs_x));
+
+  atomicAdd(loss, element_loss / static_cast<float>(size));
+}
+
+void launch_bce_with_logits_forward(
+    const float *logits,
+    const float *target,
+    float *loss,
+    int size)
+{
+  cudaMemset(loss, 0, sizeof(float));
+
+  int threads = 256;
+  int blocks = (size + threads - 1) / threads;
+
+  bce_with_logits_forward_kernel<<<blocks, threads>>>(
+      logits,
+      target,
+      loss,
+      size);
+}

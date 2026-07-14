@@ -28,6 +28,13 @@ void launch_cross_entropy_backward(
     int batch_size,
     int num_classes);
 
+void launch_bce_with_logits_backward(
+    const float *logits,
+    const float *target,
+    const float *grad_out,
+    float *grad_logits,
+    int size);
+
 Tensor Tensor::grad() const
 {
   if (!grad_tensor)
@@ -417,6 +424,27 @@ void Tensor::backward()
             logits->grad_tensor->d_data,
             batch_size,
             num_classes);
+      }
+    }
+    else if (tensor->grad_fn->op == OpType::BCE_WITH_LOGITS)
+    {
+      Tensor *logits = tensor->grad_fn->parents[0];
+
+      if (logits && logits->requires_grad)
+      {
+        if (tensor->grad_fn->saved_tensors.empty())
+        {
+          throw std::runtime_error("bce_with_logits backward missing saved target");
+        }
+
+        Tensor *target = tensor->grad_fn->saved_tensors.back().get();
+
+        launch_bce_with_logits_backward(
+            logits->d_data,
+            target->d_data,
+            tensor->grad_tensor->d_data,
+            logits->grad_tensor->d_data,
+            logits->size);
       }
     }
   }

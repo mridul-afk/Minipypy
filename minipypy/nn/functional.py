@@ -23,3 +23,6 @@ def softmax(x, dim = -1):
 
 def cross_entropy(logits, target):
     return logits.cross_entropy(target)
+
+def binary_cross_entropy_with_logits(logits, target):
+    return logits.bce_with_logits(target)

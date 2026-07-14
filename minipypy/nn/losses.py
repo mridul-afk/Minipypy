@@ -1,5 +1,5 @@
 from .modules import Module
-from .functional import mse_loss, hinge_loss, cross_entropy
+from .functional import mse_loss, hinge_loss, cross_entropy, binary_cross_entropy_with_logits
 
 
 class MSELoss(Module):
@@ -15,3 +15,8 @@ class HingeLoss(Module):
 class CrossEntropyLoss(Module):
     def forward(self, logits, target):
         return cross_entropy(logits, target)
+
+
+class BCEWithLogitsLoss(Module):
+    def forward(self, logits, target):
+        return binary_cross_entropy_with_logits(logits, target)

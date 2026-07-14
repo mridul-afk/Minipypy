@@ -18,7 +18,8 @@ enum class OpType
     MATMUL,
     RELU,
     SOFTMAX,
-    CROSS_ENTROPY
+    CROSS_ENTROPY,
+    BCE_WITH_LOGITS
 };
 
 struct AutogradNode

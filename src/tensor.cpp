@@ -241,6 +241,12 @@ void launch_cross_entropy_forward(
     int batch_size,
     int num_classes);
 
+void launch_bce_with_logits_forward(
+    const float *logits,
+    const float *target,
+    float *loss,
+    int size);
+
 std::vector<int> broadcast_shape(
     const std::vector<int> &a,
     const std::vector<int> &b)
@@ -1515,7 +1521,9 @@ Tensor Tensor::cross_entropy(const Tensor &target) const
     }
   }
 
-  Tensor out(std::vector<int>{1}, this->requires_grad);
+  bool needs_grad = this->requires_grad || this->grad_fn != nullptr;
+
+  Tensor out(std::vector<int>{1}, needs_grad);
 
   launch_cross_entropy_forward(
       this->d_data,
@@ -1524,7 +1532,7 @@ Tensor Tensor::cross_entropy(const Tensor &target) const
       batch_size,
       num_classes);
 
-  if (this->requires_grad)
+  if (needs_grad)
   {
     out.grad_fn = std::make_shared<AutogradNode>();
     out.grad_fn->op = OpType::CROSS_ENTROPY;
@@ -1546,5 +1554,83 @@ Tensor Tensor::cross_entropy(const Tensor &target) const
         std::make_shared<Tensor>(std::move(saved_target)));
   }
 
+  return out;
+}
+
+Tensor Tensor::bce_with_logits(const Tensor &target) const
+{
+  /*
+    BCEWithLogitsLoss for binary or multi-label classification.
+
+    Expected:
+      logits.shape == target.shape
+
+    Target values:
+      0.0 or 1.0
+
+    Output:
+      scalar tensor with shape [1]
+
+    Stable formula:
+      loss = max(x, 0) - x * y + log(1 + exp(-abs(x)))
+  */
+
+  if (this->shape != target.shape)
+  {
+    throw std::runtime_error("bce_with_logits requires logits and target to have the same shape");
+  }
+
+  if (target.requires_grad)
+  {
+    throw std::runtime_error("bce_with_logits target must not require grad");
+  }
+
+  /*
+    Validate target values on CPU for clear error messages.
+
+    BCE targets should be binary:
+      0.0 or 1.0
+  */
+  std::vector<float> target_host = target.cpu();
+
+  for (int i = 0; i < target.size; i++)
+  {
+    float v = target_host[i];
+
+    if (v != 0.0f && v != 1.0f)
+    {
+      throw std::runtime_error("bce_with_logits target values must be 0.0 or 1.0");
+    }
+  }
+
+  bool needs_grad = this->requires_grad || this->grad_fn != nullptr;
+
+  Tensor out(std::vector<int>{1}, needs_grad);
+
+  launch_bce_with_logits_forward(
+      this->d_data,
+      target.d_data,
+      out.d_data,
+      this->size);
+
+  if (needs_grad)
+  {
+    out.grad_fn = std::make_shared<AutogradNode>();
+    out.grad_fn->op = OpType::BCE_WITH_LOGITS;
+
+    /*
+      Parent 0 is logits.
+      Gradients flow only into logits, not target labels.
+    */
+    add_parent_to_node(out.grad_fn, *this);
+
+    /*
+      Save target because backward needs it.
+    */
+    Tensor saved_target(target.cpu(), target.shape, false);
+
+    out.grad_fn->saved_tensors.push_back(
+        std::make_shared<Tensor>(std::move(saved_target)));
+  }
   return out;
 }

@@ -476,3 +476,59 @@ void launch_cross_entropy_backward(
         batch_size,
         num_classes);
 }
+
+__global__ void bce_with_logits_backward_kernel(
+    const float *logits,
+    const float *target,
+    const float *grad_out,
+    float *grad_logits,
+    int size)
+{
+    /*
+      BCEWithLogitsLoss backward.
+
+      Forward:
+        loss = mean BCEWithLogits(logits, target)
+
+      Backward:
+        dloss/dx = (sigmoid(x) - y) / size
+
+      Also multiply by grad_out[0] so this works if the loss
+      is part of a larger expression.
+    */
+
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (idx >= size)
+        return;
+
+    float x = logits[idx];
+    float y = target[idx];
+
+    float sigmoid = 1.0f / (1.0f + expf(-x));
+
+    float grad =
+        grad_out[0] *
+        (sigmoid - y) /
+        static_cast<float>(size);
+
+    atomicAdd(&grad_logits[idx], grad);
+}
+
+void launch_bce_with_logits_backward(
+    const float *logits,
+    const float *target,
+    const float *grad_out,
+    float *grad_logits,
+    int size)
+{
+    int threads = 256;
+    int blocks = (size + threads - 1) / threads;
+
+    bce_with_logits_backward_kernel<<<blocks, threads>>>(
+        logits,
+        target,
+        grad_out,
+        grad_logits,
+        size);
+}
