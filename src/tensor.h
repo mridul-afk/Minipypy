@@ -85,6 +85,9 @@ public:
    Tensor operator-(float scalar) const;
    Tensor operator*(float scalar) const;
    Tensor operator/(float scalar) const;
+
+   // MATH FUNCTIONS
+   Tensor sqrt() const;
 };
 
 Tensor operator+(float scalar, const Tensor &t);

@@ -6,6 +6,8 @@
 #include <unordered_set>
 #include <algorithm>
 
+// BACKWARD KERNELS DECLARATIONS
+
 void launch_relu_backward(
     const float *input,
     const float *grad_out,
@@ -33,6 +35,12 @@ void launch_bce_with_logits_backward(
     const float *target,
     const float *grad_out,
     float *grad_logits,
+    int size);
+
+void launch_sqrt_backward(
+    const float *input,
+    const float *grad_out,
+    float *grad_in,
     int size);
 
 Tensor Tensor::grad() const
@@ -445,6 +453,19 @@ void Tensor::backward()
             tensor->grad_tensor->d_data,
             logits->grad_tensor->d_data,
             logits->size);
+      }
+    }
+    else if (tensor->grad_fn->op == OpType::SQRT)
+    {
+      Tensor *a = tensor->grad_fn->parents[0];
+
+      if (a && (a->requires_grad || a->grad_fn != nullptr))
+      {
+        launch_sqrt_backward(
+            a->d_data,
+            tensor->grad_tensor->d_data,
+            a->grad_tensor->d_data,
+            a->size);
       }
     }
   }

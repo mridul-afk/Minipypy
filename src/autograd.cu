@@ -532,3 +532,52 @@ void launch_bce_with_logits_backward(
         grad_logits,
         size);
 }
+
+__global__ void sqrt_backward_kernel(
+    const float *input,
+    const float *grad_out,
+    float *grad_in,
+    int size)
+
+{
+    /*
+        y = sqrt(x)
+
+        dy/dx = 1 / (2 * sqrt(x))
+
+        grad_in += grad_out * 1 / (2 * sqrt(x))
+    */
+
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (idx < size)
+    {
+        float x = input[idx];
+
+        /*
+  Avoid division by zero.
+  For Adam, v_hat + eps should be positive anyway.
+*/
+        if (x > 0.0f)
+        {
+            float grad = grad_out[idx] * (0.5f / sqrtf(x));
+            atomicAdd(&grad_in[idx], grad);
+        }
+    }
+}
+
+void launch_sqrt_backward(
+    const float *input,
+    const float *grad_out,
+    float *grad_in,
+    int size)
+{
+    int threads = 256;
+    int blocks = (size + threads - 1) / threads;
+
+    sqrt_backward_kernel<<<blocks, threads>>>(
+        input,
+        grad_out,
+        grad_in,
+        size);
+}

@@ -1336,3 +1336,30 @@ void launch_bce_with_logits_forward(
       loss,
       size);
 }
+
+__global__ void sqrt_forward_kernel(
+    const float *input,
+    float *output,
+    int size)
+{
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+  if (idx < size)
+  {
+    output[idx] = sqrtf(input[idx]);
+  }
+}
+
+void launch_sqrt_forward(
+    const float *input,
+    float *output,
+    int size)
+{
+  int threads = 256;
+  int blocks = (size + threads - 1) / threads;
+
+  sqrt_forward_kernel<<<blocks, threads>>>(
+      input,
+      output,
+      size);
+}

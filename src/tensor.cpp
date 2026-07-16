@@ -247,6 +247,11 @@ void launch_bce_with_logits_forward(
     float *loss,
     int size);
 
+void launch_sqrt_forward(
+    const float *input,
+    float *output,
+    int size);
+
 std::vector<int> broadcast_shape(
     const std::vector<int> &a,
     const std::vector<int> &b)
@@ -1632,5 +1637,34 @@ Tensor Tensor::bce_with_logits(const Tensor &target) const
     out.grad_fn->saved_tensors.push_back(
         std::make_shared<Tensor>(std::move(saved_target)));
   }
+  return out;
+}
+
+Tensor Tensor::sqrt() const
+{
+  /*
+    Elementwise square root.
+
+    y = sqrt(x)
+
+    Mainly needed for Adam:
+      param = param - lr * m_hat / (sqrt(v_hat) + rps)
+  */
+
+  Tensor out(this->shape, this->requires_grad || this->grad_fn != nullptr);
+
+  launch_sqrt_forward(
+      this->d_data,
+      out.d_data,
+      this->size);
+
+  if (this->shape, this->requires_grad || this->grad_fn != nullptr)
+  {
+    out.grad_fn = std::make_shared<AutogradNode>();
+    out.grad_fn->op = OpType::SQRT;
+
+    add_parent_to_node(out.grad_fn, *this);
+  }
+
   return out;
 }
