@@ -18,26 +18,39 @@ MiniPyPy currently supports:
 * N-D broadcasted batched matmul forward/backward
 * ReLU forward/backward
 * N-D Softmax forward/backward
+* CUDA-backed `sqrt()`
 * Fused CrossEntropyLoss forward/backward
 * Fused BCEWithLogitsLoss forward/backward
 * Basic neural network modules
 * Sequential models
 * SGD optimizer
+* Adam optimizer
 * MSELoss
 * HingeLoss
 * CrossEntropyLoss
 * BCEWithLogitsLoss
+* MNIST linear training example
 
 Latest milestone:
 
 ```text
-v0.8.5 — BCEWithLogitsLoss
+v0.8.6 — Adam Optimizer
 ```
 
 Full test suite:
 
 ```text
-75 passed
+80 passed
+```
+
+Verified training example:
+
+```text
+MNIST Linear Classifier with SGD:
+test_acc ≈ 86.72% on a 512-sample test subset
+
+MNIST Linear Classifier with Adam:
+test_acc ≈ 82.62% on a 512-sample test subset
 ```
 
 ## Example
@@ -55,7 +68,7 @@ model = mini.nn.Sequential(
 )
 
 loss_fn = mini.nn.MSELoss()
-optimizer = mini.optim.SGD(model, lr=0.01)
+optimizer = mini.optim.Adam(model, lr=0.05)
 
 for epoch in range(100):
     pred = model(x)
@@ -330,6 +343,31 @@ x.softmax(dim=1)
 x.softmax(dim=-1)
 ```
 
+## sqrt
+
+`sqrt()` is implemented as a CUDA-backed tensor operation with autograd support.
+
+It is mainly used by the Adam optimizer.
+
+```python
+x = mini.Tensor([1.0, 4.0, 9.0, 16.0], requires_grad=True)
+
+y = x.sqrt()
+loss = y.sum()
+
+loss.backward()
+
+print(y.cpu())
+print(x.grad().cpu())
+```
+
+Expected output:
+
+```text
+[1.0, 2.0, 3.0, 4.0]
+[0.5, 0.25, 0.166666..., 0.125]
+```
+
 ## Neural Network API
 
 MiniPyPy includes a small `mini.nn` package.
@@ -363,6 +401,7 @@ Optimizer API:
 
 ```text
 mini.optim.SGD
+mini.optim.Adam
 ```
 
 ## Linear Layer
@@ -576,9 +615,11 @@ loss = mini.nn.BCEWithLogitsLoss()(logits, target)
 loss.backward()
 ```
 
-## Optimizer
+## Optimizers
 
-MiniPyPy currently supports SGD:
+MiniPyPy currently supports SGD and Adam.
+
+### SGD
 
 ```python
 optimizer = mini.optim.SGD(model, lr=0.01)
@@ -588,20 +629,111 @@ loss.backward()
 optimizer.step()
 ```
 
-Currently, `SGD` takes the model object directly because parameter updates replace tensors rather than mutating them in-place.
+### Adam
+
+```python
+optimizer = mini.optim.Adam(model, lr=0.001)
+
+optimizer.zero_grad()
+loss.backward()
+optimizer.step()
+```
+
+Adam keeps first and second moment estimates for each parameter:
+
+```text
+m_t = beta1 * m_{t-1} + (1 - beta1) * g_t
+v_t = beta2 * v_{t-1} + (1 - beta2) * g_t^2
+```
+
+Then applies bias correction:
+
+```text
+m_hat = m_t / (1 - beta1^t)
+v_hat = v_t / (1 - beta2^t)
+```
+
+and updates parameters using:
+
+```text
+param = param - lr * m_hat / (sqrt(v_hat) + eps)
+```
+
+Currently, optimizers take the model object directly because parameter updates replace tensors rather than mutating them in-place.
+
+## MNIST Training Example
+
+MiniPyPy can train a simple MNIST linear classifier using its own tensor, autograd, loss, and optimizer stack.
+
+Example model:
+
+```python
+model = mini.nn.Linear(784, 10)
+loss_fn = mini.nn.CrossEntropyLoss()
+optimizer = mini.optim.SGD(model, lr=0.1)
+```
+
+Adam can also be used:
+
+```python
+optimizer = mini.optim.Adam(model, lr=0.001)
+```
+
+Training pipeline:
+
+```text
+MNIST image
+→ flatten to [784]
+→ mini.Tensor
+→ Linear(784, 10)
+→ CrossEntropyLoss
+→ backward
+→ optimizer step
+→ improved accuracy
+```
+
+Verified SGD run on a small MNIST subset:
+
+```text
+batch_size  = 32
+epochs      = 3
+train_limit = 2048
+test_limit  = 512
+optimizer   = SGD
+lr          = 0.1
+
+epoch 1 summary: train_loss=1.1566 train_acc=0.7231 test_loss=0.7769 test_acc=0.8203
+epoch 2 summary: train_loss=0.6286 train_acc=0.8442 test_loss=0.5910 test_acc=0.8477
+epoch 3 summary: train_loss=0.5267 train_acc=0.8638 test_loss=0.5265 test_acc=0.8672
+```
+
+Verified Adam run on the same setup:
+
+```text
+batch_size  = 32
+epochs      = 3
+train_limit = 2048
+test_limit  = 512
+optimizer   = Adam
+lr          = 0.001
+
+epoch 1 summary: train_loss=1.6186 train_acc=0.6592 test_loss=1.2126 test_acc=0.7734
+epoch 2 summary: train_loss=0.9367 train_acc=0.8179 test_loss=0.8461 test_acc=0.8164
+epoch 3 summary: train_loss=0.7047 train_acc=0.8501 test_loss=0.6977 test_acc=0.8262
+```
 
 ## Tests
 
 Run the full test suite:
 
 ```powershell
-python -m pytest tests/test_autograd.py tests/test_scalar_ops.py tests/test_training.py tests/test_nn.py tests/test_relu.py tests/test_sequential.py tests/test_optim.py tests/test_scalar_autograd.py tests/test_hinge_loss.py tests/test_softmax.py tests/test_cross_entropy_loss.py tests/test_bce_with_logits_loss.py -v
+python -m pytest tests/test_autograd.py tests/test_scalar_ops.py tests/test_training.py tests/test_nn.py tests/test_relu.py tests/test_sequential.py tests/test_optim.py tests/test_scalar_autograd.py tests/test_hinge_loss.py tests/test_softmax.py tests/test_cross_entropy_loss.py tests/test_bce_with_logits_loss.py tests/test_sqrt.py tests/test_adam.py -v
 ```
 
-Expected result for v0.8.5:
+Expected result for v0.8.6:
 
 ```text
-75 passed
+80 passed
 ```
 
 ## Project Roadmap
@@ -609,10 +741,16 @@ Expected result for v0.8.5:
 Near-term roadmap:
 
 ```text
-v0.9.0 — MNIST Linear Classifier
-v0.9.1 — Accuracy / argmax helper utilities
-v0.9.2 — Better training examples and benchmarks
-v0.10.0 — TensorFoldLinear prototype
+v0.9.0 — TensorFoldLinear prototype
+```
+
+Planned work before the next public release:
+
+```text
+- Continue improving MNIST and training examples on main
+- Begin TensorFoldLinear implementation
+- Compare Dense Linear vs TensorFoldLinear
+- Track parameter count, loss, accuracy, and training behavior
 ```
 
 Long-term goals:
@@ -623,12 +761,12 @@ Long-term goals:
 * `no_grad()` context manager
 * More activation functions
 * More loss functions
-* Adam optimizer
-* Sigmoid, tanh, exp, log, and sqrt primitives
+* Sigmoid, tanh, exp, and log primitive APIs
 * Convolution layers
 * TensorFold low-rank layers
 * CUDA kernel optimization
-* cuBLAS/cuDNN integration
+* Possible cuBLAS/cuDNN integration
+* Broadcast kernel metadata optimization using CUDA constant memory
 
 ## TensorFold Direction
 
@@ -652,20 +790,61 @@ model = mini.nn.Sequential(
 
 The goal is to reduce parameter count and memory usage while keeping training and inference GPU-backed.
 
+Potential first TensorFold target:
+
+```text
+Dense Linear:
+W shape = [in_features, out_features]
+
+TensorFoldLinear:
+factorized low-rank representation of W
+```
+
+Initial benchmark goal:
+
+```text
+Dense Linear(784, 10)
+vs
+TensorFoldLinear(784, 10)
+on MNIST
+```
+
+## Future Optimization Notes
+
+One possible CUDA optimization is to use constant memory for small read-only broadcasting metadata.
+
+Current broadcast kernels pass shape and stride metadata through normal GPU memory.
+
+Potential improvement:
+
+```text
+Store these in CUDA constant memory:
+- output shape
+- input shapes
+- input strides
+- ndim
+```
+
+This may improve broadcast kernels because all threads repeatedly read the same metadata values.
+
+Tensor data itself should remain in global memory.
+
+This optimization should be benchmarked later and is not required before TensorFold.
+
 ## Known Limitations
 
 MiniPyPy is still experimental.
 
 Current limitations:
 
-* No Adam optimizer yet
-* No sigmoid, tanh, exp, log, or sqrt primitive APIs yet
 * No convolution layers yet
 * No TensorFold layers yet
 * No `no_grad()` context manager yet
 * No true integer tensor dtype yet
+* No sigmoid, tanh, exp, or log primitive APIs yet
 * CrossEntropyLoss currently supports only `[batch, classes]` logits
 * Parameter updates currently replace tensors instead of mutating them in-place
+* Optimizer state is currently managed at the Python layer
 * Some internal cloning paths still use CPU roundtrips and can be optimized later
 * API and internals may change frequently
 
@@ -680,5 +859,5 @@ MiniPyPy is under active development.
 Current milestone:
 
 ```text
-Tensor + Autograd + mini.nn + ReLU + Softmax + Sequential + SGD + HingeLoss + CrossEntropyLoss + BCEWithLogitsLoss
+Tensor + Autograd + mini.nn + ReLU + Softmax + Sequential + SGD + Adam + HingeLoss + CrossEntropyLoss + BCEWithLogitsLoss + MNIST training
 ```

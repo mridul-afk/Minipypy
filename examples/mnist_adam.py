@@ -130,7 +130,7 @@ def main():
     test_limit = 512
 
     # Adam usually works well with a smaller learning rate than SGD.
-    lr = 0.0001
+    lr = 0.001
 
     model = mini.nn.Linear(784, 10)
 
