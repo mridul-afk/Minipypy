@@ -733,7 +733,7 @@ python -m pytest tests/test_autograd.py tests/test_scalar_ops.py tests/test_trai
 Expected result for v0.8.6:
 
 ```text
-80 passed
+85 passed
 ```
 
 ## Project Roadmap
