@@ -30,17 +30,19 @@ MiniPyPy currently supports:
 * CrossEntropyLoss
 * BCEWithLogitsLoss
 * MNIST linear training example
+* TensorFoldLinear low-rank layer prototype
+* TensorFoldLinear MNIST benchmark
 
 Latest milestone:
 
 ```text
-v0.8.6 — Adam Optimizer
+v0.9.0 — TensorFoldLinear Prototype
 ```
 
 Full test suite:
 
 ```text
-80 passed
+85 passed
 ```
 
 Verified training example:
@@ -377,6 +379,7 @@ Currently supported:
 ```text
 mini.nn.Module
 mini.nn.Linear
+mini.nn.TensorFoldLinear
 mini.nn.ReLU
 mini.nn.Softmax
 mini.nn.Sequential
@@ -418,6 +421,60 @@ Internally:
 
 ```text
 out = x @ W + b
+```
+
+## TensorFoldLinear Layer
+
+TensorFoldLinear is MiniPyPy's first TensorFold layer prototype.
+
+A normal dense linear layer stores one full weight matrix:
+
+```text
+W: [in_features, out_features]
+```
+
+TensorFoldLinear replaces that matrix with two trainable low-rank factors:
+
+```text
+U: [in_features, rank]
+V: [rank, out_features]
+```
+
+Dense Linear computes:
+
+```text
+Y = XW + b
+```
+
+TensorFoldLinear computes:
+
+```text
+Y = (XU)V + b
+```
+
+The full dense matrix `W` is never stored during normal forward execution.
+
+Example:
+
+```python
+layer = mini.nn.TensorFoldLinear(784, 10, rank=4)
+
+x = mini.Tensor([[0.0 for _ in range(784)]])
+
+out = layer(x)
+
+print(out.shape())
+print(layer.parameter_count())
+print(layer.dense_parameter_count())
+print(layer.compression_ratio())
+```
+
+For `TensorFoldLinear(784, 10, rank=4)`:
+
+```text
+TensorFold params = 784 × 4 + 4 × 10 + 10 = 3,186
+Dense params      = 784 × 10 + 10 = 7,850
+Compression       ≈ 2.46x
 ```
 
 ## Sequential
@@ -722,15 +779,88 @@ epoch 2 summary: train_loss=0.9367 train_acc=0.8179 test_loss=0.8461 test_acc=0.
 epoch 3 summary: train_loss=0.7047 train_acc=0.8501 test_loss=0.6977 test_acc=0.8262
 ```
 
+## TensorFoldLinear MNIST Benchmark
+
+TensorFoldLinear was benchmarked against a dense MNIST linear classifier.
+
+The dense baseline uses:
+
+```python
+model = mini.nn.Linear(784, 10)
+```
+
+The TensorFold variants use:
+
+```python
+model = mini.nn.TensorFoldLinear(784, 10, rank=r)
+```
+
+TensorFoldLinear replaces a dense Linear weight matrix:
+
+```text
+W: [in_features, out_features]
+```
+
+with two trainable low-rank factors:
+
+```text
+U: [in_features, rank]
+V: [rank, out_features]
+```
+
+Instead of computing:
+
+```text
+Y = XW + b
+```
+
+TensorFoldLinear computes:
+
+```text
+Y = (XU)V + b
+```
+
+The full dense matrix `W` is never stored during normal forward execution.
+
+Benchmark setup:
+
+```text
+batch_size  = 32
+epochs      = 3
+train_limit = 2048
+test_limit  = 512
+optimizer   = SGD
+lr          = 0.1
+```
+
+Results:
+
+| Model | Params | Compression | Test Accuracy |
+|---|---:|---:|---:|
+| Dense Linear(784, 10) | 7,850 | 1.00x | ~86.72% |
+| TensorFoldLinear rank=2 | 1,598 | 4.91x | 48.24% |
+| TensorFoldLinear rank=4 | 3,186 | 2.46x | 75.98% |
+| TensorFoldLinear rank=8 | 6,362 | 1.23x | 81.45% |
+| TensorFoldLinear rank=10 | 7,950 | 0.99x | 82.03% |
+
+The results show the expected compression-capacity tradeoff:
+
+```text
+lower rank  -> fewer parameters, stronger compression, lower accuracy
+higher rank -> more parameters, weaker compression, higher accuracy
+```
+
+For the `784 -> 10` MNIST classifier, rank 10 crosses the useful-rank threshold and is no longer compressed. Rank 8 gives the best accuracy among the compressed TensorFoldLinear variants, while rank 4 gives a stronger compression tradeoff.
+
 ## Tests
 
 Run the full test suite:
 
 ```powershell
-python -m pytest tests/test_autograd.py tests/test_scalar_ops.py tests/test_training.py tests/test_nn.py tests/test_relu.py tests/test_sequential.py tests/test_optim.py tests/test_scalar_autograd.py tests/test_hinge_loss.py tests/test_softmax.py tests/test_cross_entropy_loss.py tests/test_bce_with_logits_loss.py tests/test_sqrt.py tests/test_adam.py -v
+python -m pytest tests/test_autograd.py tests/test_scalar_ops.py tests/test_training.py tests/test_nn.py tests/test_relu.py tests/test_sequential.py tests/test_optim.py tests/test_scalar_autograd.py tests/test_hinge_loss.py tests/test_softmax.py tests/test_cross_entropy_loss.py tests/test_bce_with_logits_loss.py tests/test_sqrt.py tests/test_adam.py tests/test_tensorfold_linear.py -v
 ```
 
-Expected result for v0.8.6:
+Expected result for the current development snapshot:
 
 ```text
 85 passed
@@ -747,10 +877,10 @@ v0.9.0 — TensorFoldLinear prototype
 Planned work before the next public release:
 
 ```text
-- Continue improving MNIST and training examples on main
-- Begin TensorFoldLinear implementation
-- Compare Dense Linear vs TensorFoldLinear
-- Track parameter count, loss, accuracy, and training behavior
+- Keep Dense Linear vs TensorFoldLinear benchmark results documented
+- Create a separate examples/mnist_tensorfold.py benchmark script
+- Improve TensorFoldLinear initialization experiments
+- Begin SVD-based compression experiments from trained dense weights
 ```
 
 Long-term goals:
@@ -763,7 +893,7 @@ Long-term goals:
 * More loss functions
 * Sigmoid, tanh, exp, and log primitive APIs
 * Convolution layers
-* TensorFold low-rank layers
+* TensorFold low-rank layers and SVD-based compression experiments
 * CUDA kernel optimization
 * Possible cuBLAS/cuDNN integration
 * Broadcast kernel metadata optimization using CUDA constant memory
@@ -838,7 +968,7 @@ MiniPyPy is still experimental.
 Current limitations:
 
 * No convolution layers yet
-* No TensorFold layers yet
+* No full tensor decomposition layers yet; TensorFoldLinear is currently low-rank matrix factorization only
 * No `no_grad()` context manager yet
 * No true integer tensor dtype yet
 * No sigmoid, tanh, exp, or log primitive APIs yet
@@ -859,5 +989,5 @@ MiniPyPy is under active development.
 Current milestone:
 
 ```text
-Tensor + Autograd + mini.nn + ReLU + Softmax + Sequential + SGD + Adam + HingeLoss + CrossEntropyLoss + BCEWithLogitsLoss + MNIST training
+Tensor + Autograd + mini.nn + ReLU + Softmax + Sequential + SGD + Adam + HingeLoss + CrossEntropyLoss + BCEWithLogitsLoss + TensorFoldLinear + MNIST training
 ```
