@@ -132,7 +132,7 @@ def main():
     test_limit = 512
     lr = 0.1
 
-    model = mini.nn.Linear(784, 10)
+    model = mini.nn.TensorFoldLinear(784, 10, rank=8)
 
     loss_fn = mini.nn.CrossEntropyLoss()
     optimizer = mini.optim.SGD(model, lr=lr)
@@ -144,6 +144,9 @@ def main():
     print(f"train_limit = {train_limit}")
     print(f"test_limit  = {test_limit}")
     print(f"lr          = {lr}")
+    print("params:", model.parameter_count())
+    print("dense params:", model.dense_parameter_count())
+    print("compression:", model.compression_ratio())
     print()
 
     for epoch in range(epochs):
