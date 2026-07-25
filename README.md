@@ -837,20 +837,18 @@ Results:
 
 | Model | Params | Compression | Test Accuracy |
 |---|---:|---:|---:|
-| Dense Linear(784, 10) | 7,850 | 1.00x | ~86.72% |
-| TensorFoldLinear rank=2 | 1,598 | 4.91x | 48.24% |
-| TensorFoldLinear rank=4 | 3,186 | 2.46x | 75.98% |
-| TensorFoldLinear rank=8 | 6,362 | 1.23x | 81.45% |
-| TensorFoldLinear rank=10 | 7,950 | 0.99x | 82.03% |
+| Dense MLP | 101,770 | 1.00x | 85.55% |
+| TensorFold MLP r16/r8 | 15,834 | 6.43x | 83.40% |
+| TensorFold MLP r32/r8 | 30,426 | 3.34x | 83.79% |
+| TensorFold MLP r32/r10 | 30,702 | 3.31x | 86.13% |
+| TensorFold first layer r32 | 30,602 | 3.33x | 84.96% |
 
-The results show the expected compression-capacity tradeoff:
+TensorFold MLP r32/r10 reached dense-level accuracy with 3.31x fewer parameters on the small MNIST benchmark.
 
 ```text
-lower rank  -> fewer parameters, stronger compression, lower accuracy
-higher rank -> more parameters, weaker compression, higher accuracy
+With Xavier initialization, TensorFoldLinear rank=8 nearly matches the dense Linear baseline while using fewer parameters.
+Rank 10 reaches slightly higher accuracy, but it is not a compression win because it uses more parameters than the dense layer.
 ```
-
-For the `784 -> 10` MNIST classifier, rank 10 crosses the useful-rank threshold and is no longer compressed. Rank 8 gives the best accuracy among the compressed TensorFoldLinear variants, while rank 4 gives a stronger compression tradeoff.
 
 ## Tests
 

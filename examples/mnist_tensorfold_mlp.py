@@ -121,20 +121,88 @@ def evaluate(model, batch_size=64, limit=512):
     return total_loss / batches, total_acc / batches
 
 
-def train_tensorfold_rank(rank, batch_size, epochs, train_limit, test_limit, lr):
-    random.seed(0)
+def dense_linear_params(in_features, out_features):
+    return in_features * out_features + out_features
 
-    model = mini.nn.TensorFoldLinear(784, 10, rank=rank, init="xavier")
 
+def model_parameter_count(model):
+    total = 0
+
+    for layer in model.layers:
+        if hasattr(layer, "parameter_count"):
+            total += layer.parameter_count()
+        elif isinstance(layer, mini.nn.Linear):
+            total += dense_linear_params(
+                layer.in_features,
+                layer.out_features,
+            )
+
+    return total
+
+
+def make_dense_mlp():
+    return mini.nn.Sequential(
+        mini.nn.Linear(784, 128),
+        mini.nn.ReLU(),
+        mini.nn.Linear(128, 10),
+    )
+
+
+def make_tensorfold_all_r16_r8():
+    return mini.nn.Sequential(
+        mini.nn.TensorFoldLinear(784, 128, rank=16, init="xavier"),
+        mini.nn.ReLU(),
+        mini.nn.TensorFoldLinear(128, 10, rank=8, init="xavier"),
+    )
+
+
+def make_tensorfold_all_r32_r8():
+    return mini.nn.Sequential(
+        mini.nn.TensorFoldLinear(784, 128, rank=32, init="xavier"),
+        mini.nn.ReLU(),
+        mini.nn.TensorFoldLinear(128, 10, rank=8, init="xavier"),
+    )
+
+
+def make_tensorfold_all_r32_r10():
+    return mini.nn.Sequential(
+        mini.nn.TensorFoldLinear(784, 128, rank=32, init="xavier"),
+        mini.nn.ReLU(),
+        mini.nn.TensorFoldLinear(128, 10, rank=10, init="xavier"),
+    )
+
+
+def make_tensorfold_first_r32():
+    return mini.nn.Sequential(
+        mini.nn.TensorFoldLinear(784, 128, rank=32, init="xavier"),
+        mini.nn.ReLU(),
+        mini.nn.Linear(128, 10),
+    )
+
+
+def train_model(
+    name,
+    model,
+    dense_params,
+    batch_size,
+    epochs,
+    train_limit,
+    test_limit,
+    lr,
+):
     loss_fn = mini.nn.CrossEntropyLoss()
-    optimizer = mini.optim.SGD(model, lr=lr)
+    optimizer = mini.optim.Adam(model, lr=lr)
+
+    params = model_parameter_count(model)
+    compression = dense_params / params
 
     print()
-    print(f"TensorFoldLinear rank={rank}")
-    print("-" * 40)
-    print(f"params       = {model.parameter_count()}")
-    print(f"dense params = {model.dense_parameter_count()}")
-    print(f"compression  = {model.compression_ratio():.4f}x")
+    print(name)
+    print("-" * 70)
+    print(f"params      = {params}")
+    print(f"compression = {compression:.2f}x")
+    print(f"optimizer   = Adam")
+    print(f"lr          = {lr}")
     print()
 
     final_train_loss = None
@@ -195,10 +263,9 @@ def train_tensorfold_rank(rank, batch_size, epochs, train_limit, test_limit, lr)
     )
 
     return {
-        "rank": rank,
-        "params": model.parameter_count(),
-        "dense_params": model.dense_parameter_count(),
-        "compression": model.compression_ratio(),
+        "name": name,
+        "params": params,
+        "compression": compression,
         "train_loss": final_train_loss,
         "train_acc": final_train_acc,
         "test_loss": final_test_loss,
@@ -208,10 +275,10 @@ def train_tensorfold_rank(rank, batch_size, epochs, train_limit, test_limit, lr)
 
 def print_results_table(results):
     print()
-    print("TensorFoldLinear MNIST Benchmark Summary")
-    print("=" * 80)
+    print("Dense MLP vs TensorFold MLP Summary")
+    print("=" * 105)
     print(
-        f"{'Rank':>6} "
+        f"{'Model':<36} "
         f"{'Params':>10} "
         f"{'Compression':>14} "
         f"{'Train Loss':>12} "
@@ -219,11 +286,11 @@ def print_results_table(results):
         f"{'Test Loss':>10} "
         f"{'Test Acc':>9}"
     )
-    print("-" * 80)
+    print("-" * 105)
 
     for result in results:
         print(
-            f"{result['rank']:>6} "
+            f"{result['name']:<36} "
             f"{result['params']:>10} "
             f"{result['compression']:>13.2f}x "
             f"{result['train_loss']:>12.4f} "
@@ -232,7 +299,7 @@ def print_results_table(results):
             f"{result['test_acc']:>9.4f}"
         )
 
-    print("=" * 80)
+    print("=" * 105)
 
 
 def main():
@@ -240,27 +307,45 @@ def main():
     epochs = 3
     train_limit = 2048
     test_limit = 512
-    lr = 0.1
-    init = "xavier"
+    lr = 0.001
 
-    ranks = [2, 4, 8, 10]
-
-    print("MiniPyPy TensorFoldLinear MNIST Benchmark")
-    print("-----------------------------------------")
+    print("MiniPyPy Dense MLP vs TensorFold MLP MNIST Benchmark")
+    print("----------------------------------------------------")
     print(f"batch_size  = {batch_size}")
     print(f"epochs      = {epochs}")
     print(f"train_limit = {train_limit}")
     print(f"test_limit  = {test_limit}")
-    print(f"optimizer   = SGD")
+    print(f"optimizer   = Adam")
     print(f"lr          = {lr}")
-    print(f"ranks       = {ranks}")
-    print(f"init        = {init}")
+
+    configs = [
+        ("Dense MLP", make_dense_mlp),
+        ("TensorFold MLP r16/r8", make_tensorfold_all_r16_r8),
+        ("TensorFold MLP r32/r8", make_tensorfold_all_r32_r8),
+        ("TensorFold MLP r32/r10", make_tensorfold_all_r32_r10),
+        ("TensorFold first layer r32", make_tensorfold_first_r32),
+    ]
+
+    dense_reference_model = make_dense_mlp()
+    dense_params = model_parameter_count(dense_reference_model)
+
+    print()
+    print("Dense reference parameter count")
+    print("-------------------------------")
+    print(f"dense_params = {dense_params}")
 
     results = []
 
-    for rank in ranks:
-        result = train_tensorfold_rank(
-            rank=rank,
+    for index, (name, make_model) in enumerate(configs):
+        # Reset the Python random seed before each model so runs are easier to compare.
+        random.seed(0)
+
+        model = make_model()
+
+        result = train_model(
+            name=name,
+            model=model,
+            dense_params=dense_params,
             batch_size=batch_size,
             epochs=epochs,
             train_limit=train_limit,

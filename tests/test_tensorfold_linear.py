@@ -77,3 +77,26 @@ def test_tensorfold_linear_training_reduces_cross_entropy_loss():
     final_loss = loss_fn(model(x), y).cpu()[0]
 
     assert final_loss < initial_loss
+
+def test_tensorfold_linear_accepts_simple_init():
+    layer = mini.nn.TensorFoldLinear(4, 3, rank=2, init="simple")
+
+    assert layer.U.shape() == [4, 2]
+    assert layer.V.shape() == [2, 3]
+    assert layer.b.shape() == [1, 3]
+
+
+def test_tensorfold_linear_accepts_xavier_init():
+    layer = mini.nn.TensorFoldLinear(4, 3, rank=2, init="xavier")
+
+    assert layer.U.shape() == [4, 2]
+    assert layer.V.shape() == [2, 3]
+    assert layer.b.shape() == [1, 3]
+
+
+def test_tensorfold_linear_rejects_unknown_init():
+    try:
+        mini.nn.TensorFoldLinear(4, 3, rank=2, init="bad")
+        assert False
+    except ValueError as error:
+        assert "init must be either" in str(error)

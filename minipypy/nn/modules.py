@@ -1,4 +1,5 @@
 import random
+import math
 import minipypy as mini
 
 
@@ -71,13 +72,17 @@ class TensorFoldLinear(Module):
     It stores only U, V, and b.
     """
 
-    def __init__(self, in_features, out_features, rank):
+    def __init__(self, in_features, out_features, rank, init="xavier"):
         self.in_features = in_features
         self.out_features = out_features
         self.rank = rank
+        self.init = init
 
         if rank <= 0:
             raise ValueError("rank must be greater than 0")
+
+        if init not in ["simple", "xavier"]:
+            raise ValueError("init must be either 'simple' or 'xavier'")
 
         max_useful_rank = (
             in_features * out_features
@@ -91,20 +96,20 @@ class TensorFoldLinear(Module):
                 f"rank={rank}, useful rank should be less than {max_useful_rank:.2f}"
             )
 
-        scale = 0.05
+        u_scale, v_scale = self._get_init_scales(init)
 
         u_data = []
         for _ in range(in_features):
             row = []
             for _ in range(rank):
-                row.append((random.random() * 2.0 - 1.0) * scale)
+                row.append((random.random() * 2.0 - 1.0) * u_scale)
             u_data.append(row)
 
         v_data = []
         for _ in range(rank):
             row = []
             for _ in range(out_features):
-                row.append((random.random() * 2.0 - 1.0) * scale)
+                row.append((random.random() * 2.0 - 1.0) * v_scale)
             v_data.append(row)
 
         b_data = [[0.0 for _ in range(out_features)]]
@@ -112,6 +117,17 @@ class TensorFoldLinear(Module):
         self.U = mini.Tensor(u_data, requires_grad=True)
         self.V = mini.Tensor(v_data, requires_grad=True)
         self.b = mini.Tensor(b_data, requires_grad=True)
+
+    def _get_init_scales(self, init):
+        if init == "simple":
+            return 0.05, 0.05
+
+        if init == "xavier":
+            u_scale = math.sqrt(6.0 / (self.in_features + self.rank))
+            v_scale = math.sqrt(6.0 / (self.rank + self.out_features))
+            return u_scale, v_scale
+
+        raise ValueError("init must be either 'simple' or 'xavier'")
 
     def forward(self, x):
         hidden = x @ self.U
