@@ -4,7 +4,7 @@ MiniPyPy is a minimal PyTorch-inspired deep-learning framework built from scratc
 
 The project is designed to make the internals of a deep-learning framework understandable while still providing GPU-backed tensor operations, automatic differentiation, neural-network modules, optimizers, and model-training examples.
 
-TensorFold is a subsystem of MiniPyPy that will add compressed and factorized neural-network layers.
+TensorFold is a subsystem of MiniPyPy that adds compressed and factorized neural-network layers. The first TensorFold component, `TensorFoldLinear`, is implemented as a low-rank matrix factorization layer.
 
 ---
 
@@ -96,6 +96,7 @@ mini.Tensor
 
 mini.nn.Module
 mini.nn.Linear
+mini.nn.TensorFoldLinear
 mini.nn.ReLU
 mini.nn.Softmax
 mini.nn.Sequential
@@ -119,6 +120,7 @@ The Python layer is mainly responsible for:
 * Providing loss-function wrappers
 * Managing optimizer state
 * Exposing a convenient user-facing API
+* Providing TensorFold factorized layers on top of existing tensor operations
 
 ---
 
@@ -758,6 +760,33 @@ b shape = [1, out_features]
 
 Bias addition uses broadcasting.
 
+### TensorFoldLinear Layer
+
+`TensorFoldLinear` is the first implemented TensorFold layer.
+
+It replaces one dense weight matrix:
+
+```text
+W shape = [in_features, out_features]
+```
+
+with two trainable factors:
+
+```text
+U shape = [in_features, rank]
+V shape = [rank, out_features]
+```
+
+The forward computation is:
+
+```text
+output = (input @ U) @ V + b
+```
+
+The full dense matrix `W` is not stored during normal forward execution.
+
+This implementation is low-rank matrix factorization. Full tensor decomposition layers such as CP, Tucker, and Tensor Train are not implemented yet.
+
 ### Sequential
 
 `Sequential` applies layers in order:
@@ -892,7 +921,7 @@ Python training script
 Model forward()
         |
         v
-Linear / activation / loss operations
+Linear / TensorFoldLinear / activation / loss operations
         |
         v
 pybind11 dispatch
@@ -986,7 +1015,75 @@ b ----------------/
 
 ---
 
-## 19. Current Limitations
+## 19. Example: TensorFoldLinear Forward Pass
+
+Python:
+
+```python
+layer = mini.nn.TensorFoldLinear(784, 128, rank=32)
+x = mini.Tensor([[0.0 for _ in range(784)]])
+
+output = layer(x)
+```
+
+The Python layer executes:
+
+```python
+hidden = x @ layer.U
+output = hidden @ layer.V
+output = output + layer.b
+```
+
+Internal flow:
+
+```text
+x @ U
+  |
+  v
+Tensor::matmul()
+  |
+  v
+CUDA matmul kernel
+  |
+  v
+hidden representation H
+
+H @ V
+  |
+  v
+Tensor::matmul()
+  |
+  v
+CUDA matmul kernel
+  |
+  v
+output before bias
+
+output + b
+  |
+  v
+broadcast-add kernel
+  |
+  v
+final output
+```
+
+The resulting autograd graph is:
+
+```text
+x -----\
+        MATMUL ---> H -----\
+U -----/                    MATMUL ----\
+                           /            ADD ---> output
+V ------------------------/            /
+                                      b
+```
+
+No new C++ or CUDA operation is required for the current `TensorFoldLinear` implementation. It reuses existing MiniPyPy matmul, broadcasting, autograd, and optimizer support.
+
+---
+
+## 20. Current Limitations
 
 MiniPyPy is still experimental.
 
@@ -1003,37 +1100,39 @@ Current limitations include:
 * Some reductions and helper operations are not fully generalized
 * CUDA error handling is not yet centralized
 * The memory pool does not yet support block splitting or stream awareness
-* TensorFold layers are not yet implemented
+* TensorFoldLinear is implemented, but full tensor decomposition layers are not implemented yet
+* CP, Tucker, Tensor Train, TT-SVD, and HOSVD are future work
 * API and internals may change between versions
 
 ---
 
-## 20. Planned Architecture Improvements
+## 21. Planned Architecture Improvements
 
 Future architectural work includes:
 
-1. Implement `TensorFoldLinear`.
-2. Add direct GPU-to-GPU cloning.
-3. Add in-place parameter updates.
-4. Introduce a `no_grad()` mechanism.
-5. Improve CUDA error checking.
-6. Reduce temporary metadata allocations.
-7. Add more activation and mathematical operations.
-8. Add convolution support.
-9. Add model serialization.
-10. Benchmark custom kernels against optimized CUDA libraries.
-11. Investigate optional cuBLAS and cuDNN integration.
-12. Improve the memory pool with stream-aware reuse.
-13. Add dtype support.
-14. Improve graph ownership and lifetime management.
+1. Add direct GPU-to-GPU cloning.
+2. Add in-place parameter updates.
+3. Introduce a `no_grad()` mechanism.
+4. Improve CUDA error checking.
+5. Reduce temporary metadata allocations.
+6. Add more activation and mathematical operations.
+7. Add convolution support.
+8. Add model serialization.
+9. Benchmark custom kernels against optimized CUDA libraries.
+10. Investigate optional cuBLAS and cuDNN integration.
+11. Improve the memory pool with stream-aware reuse.
+12. Add dtype support.
+13. Improve graph ownership and lifetime management.
+14. Add TensorFold dense-to-factorized conversion utilities.
+15. Add true tensor decomposition layers after the low-rank TensorFoldLinear path is stable.
 
 ---
 
-## 21. TensorFold Integration
+## 22. TensorFold Integration
 
-TensorFold will be implemented as a subsystem of MiniPyPy.
+TensorFold is implemented as a subsystem of MiniPyPy.
 
-The first planned layer is:
+The first implemented layer is:
 
 ```python
 mini.nn.TensorFoldLinear(
@@ -1049,7 +1148,7 @@ Instead of storing one dense weight matrix:
 W shape = [in_features, out_features]
 ```
 
-the first implementation will store two smaller factors:
+the current implementation stores two smaller factors:
 
 ```text
 U shape = [in_features, rank]
@@ -1068,7 +1167,7 @@ The full matrix:
 W = U @ V
 ```
 
-will not be reconstructed during normal execution.
+is not reconstructed during normal execution.
 
 This design allows TensorFold to reuse MiniPyPy's existing:
 
@@ -1088,7 +1187,7 @@ future/tensorfold.md
 
 ---
 
-## 22. Project Philosophy
+## 23. Project Philosophy
 
 MiniPyPy prioritizes:
 
@@ -1108,6 +1207,3 @@ Every major framework feature should be implemented with:
 * A backward rule
 * A benchmark where performance matters
 * Documentation explaining the design decision
-
-```
-```

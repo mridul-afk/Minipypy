@@ -916,13 +916,13 @@ fine-tune or run compressed inference
 Run the full test suite:
 
 ```powershell
-python -m pytest tests/test_autograd.py tests/test_scalar_ops.py tests/test_training.py tests/test_nn.py tests/test_relu.py tests/test_sequential.py tests/test_optim.py tests/test_scalar_autograd.py tests/test_hinge_loss.py tests/test_softmax.py tests/test_cross_entropy_loss.py tests/test_bce_with_logits_loss.py tests/test_sqrt.py tests/test_adam.py tests/test_tensorfold_linear.py -v
+python -m pytest -v
 ```
 
 Expected result for the current development snapshot:
 
 ```text
-85 passed
+92 passed
 ```
 
 ---

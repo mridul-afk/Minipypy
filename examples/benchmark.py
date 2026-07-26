@@ -1,6 +1,4 @@
-from minitorch import Tensor
+import minipypy as mini
 
-a = Tensor([10])
-
+a = mini.Tensor([10.0])
 print(a)
-

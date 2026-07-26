@@ -2,13 +2,58 @@
 
 TensorFold is MiniPyPy's neural-network compression subsystem.
 
-It is not a separate framework. It will use MiniPyPy's tensor engine, CUDA operations, autograd system, neural-network API, optimizers, and memory pool to provide factorized replacements for dense neural-network layers.
+It is not a separate framework. It uses MiniPyPy's tensor engine, CUDA operations, autograd system, neural-network API, optimizers, and memory pool to provide factorized replacements for dense neural-network layers.
 
-The first TensorFold component will be `TensorFoldLinear`.
+The first TensorFold component, `TensorFoldLinear`, is implemented.
+
+`TensorFoldLinear` is currently a low-rank matrix factorization layer. It is not yet CP decomposition, Tucker decomposition, Tensor Train, TT-SVD, or HOSVD.
 
 ---
 
-## 1. Motivation
+## 1. Current Implementation Status
+
+Implemented in `v0.9.0`:
+
+```text
+mini.nn.TensorFoldLinear
+```
+
+Current TensorFold path:
+
+```text
+Train compressed low-rank neural networks from scratch.
+```
+
+Implemented features:
+
+* Trainable low-rank factors
+* Xavier initialization by default
+* Optional simple initialization
+* Parameter-count reporting
+* Dense-parameter-count reporting
+* Compression-ratio reporting
+* Forward pass using existing MiniPyPy matmul
+* Autograd through both factor matrices
+* SGD and Adam support through MiniPyPy optimizers
+* Single-layer MNIST benchmark
+* Dense MLP vs TensorFold MLP benchmark
+* Unit tests for construction, shapes, parameters, initialization, validation, and training behavior
+
+Not implemented yet:
+
+* CP decomposition
+* Tucker decomposition
+* Tensor Train decomposition
+* TT-SVD
+* HOSVD
+* Dense-to-TensorFold conversion
+* Pretrained PyTorch model compression
+* Tensorized convolution layers
+* Tensor Train CUDA kernels
+
+---
+
+## 2. Motivation
 
 A normal dense linear layer stores a weight matrix:
 
@@ -48,11 +93,11 @@ Apply the factors directly during forward execution.
 
 ---
 
-## 2. TensorFold Is a MiniPyPy Subsystem
+## 3. TensorFold Is a MiniPyPy Subsystem
 
-TensorFold will live inside MiniPyPy's neural-network API.
+TensorFold lives inside MiniPyPy's neural-network API.
 
-Planned usage:
+Current usage:
 
 ```python
 import minipypy as mini
@@ -64,7 +109,7 @@ layer = mini.nn.TensorFoldLinear(
 )
 ```
 
-A model may combine standard and TensorFold layers:
+A model can combine standard and TensorFold layers:
 
 ```python
 model = mini.nn.Sequential(
@@ -74,7 +119,7 @@ model = mini.nn.Sequential(
 )
 ```
 
-TensorFold will reuse:
+TensorFold reuses:
 
 ```text
 MiniPyPy Tensor
@@ -86,11 +131,13 @@ MiniPyPy SGD and Adam
 MiniPyPy CUDA memory pool
 ```
 
+No new C++ or CUDA operation is required for the current low-rank prototype.
+
 ---
 
-## 3. Initial Scope
+## 4. Current Scope
 
-The first TensorFold implementation will focus on two-dimensional linear-layer weight matrices.
+The current TensorFold implementation focuses on two-dimensional linear-layer weight matrices.
 
 For a normal linear layer:
 
@@ -98,7 +145,7 @@ For a normal linear layer:
 W ∈ R^(m × n)
 ```
 
-TensorFold will approximate or represent it as:
+TensorFold represents the effective weight as:
 
 ```text
 W ≈ UV
@@ -119,13 +166,13 @@ r << min(m, n)
 
 The value `r` is called the rank or chosen low-rank dimension.
 
-The first implementation is therefore a low-rank matrix factorization layer.
+This is low-rank matrix factorization.
 
-Higher-order tensor decompositions such as Tucker, CP, or Tensor Train may be explored after the low-rank linear layer is correct and benchmarked.
+Higher-order tensor decompositions such as Tucker, CP, and Tensor Train are planned future work.
 
 ---
 
-## 4. Dense Linear Layer
+## 5. Dense Linear Layer
 
 Suppose:
 
@@ -175,9 +222,9 @@ scalar multiply-accumulate operations.
 
 ---
 
-## 5. TensorFold Linear Layer
+## 6. TensorFoldLinear Layer
 
-TensorFold replaces the full matrix with two factors:
+TensorFoldLinear replaces the full matrix with two factors:
 
 ```text
 W ≈ UV
@@ -243,9 +290,9 @@ C_tensorfold = Br(m + n)
 
 ---
 
-## 6. Compression Condition
+## 7. Compression Condition
 
-TensorFold uses fewer weight parameters when:
+TensorFoldLinear uses fewer weight parameters when:
 
 ```text
 mr + rn < mn
@@ -281,7 +328,7 @@ However, meaningful compression normally requires a rank substantially smaller t
 
 ---
 
-## 7. Compression Ratio
+## 8. Compression Ratio
 
 The weight compression ratio can be defined as:
 
@@ -301,7 +348,7 @@ or:
 
 ```text
 compression_ratio =
-mn / (r(m + n))
+mn / [r(m + n)]
 ```
 
 A value greater than `1` means the factorized representation uses fewer parameters.
@@ -334,13 +381,11 @@ Compression ratio:
 200,704 / 16,640 ≈ 12.06
 ```
 
-The factorized weights use approximately twelve times fewer parameters.
-
 Bias parameters remain unchanged.
 
 ---
 
-## 8. Compute Reduction
+## 9. Compute Reduction
 
 The compute ratio can be approximated as:
 
@@ -376,7 +421,7 @@ TensorFold performance must therefore be benchmarked rather than assumed.
 
 ---
 
-## 9. Example Forward Pass
+## 10. Example Forward Pass
 
 Consider:
 
@@ -433,7 +478,7 @@ but it is never reconstructed during normal inference or training.
 
 ---
 
-## 10. Rank
+## 11. Rank
 
 The selected rank `r` determines the trade-off between compression and model capacity.
 
@@ -459,127 +504,102 @@ It should not be chosen only from matrix dimensions. It must also be validated e
 
 ---
 
-## 11. Rank Selection Strategies
+## 12. Rank Validation
 
-TensorFold may support several rank-selection strategies.
-
-### 11.1 Fixed Rank
-
-The user explicitly specifies the rank:
-
-```python
-mini.nn.TensorFoldLinear(784, 256, rank=16)
-```
-
-This is the simplest first implementation.
-
-### 11.2 Compression-Target Rank
-
-Choose a rank based on a desired compression ratio `c`.
-
-Starting with:
+The current implementation validates:
 
 ```text
-c = mn / [r(m + n)]
+in_features > 0
+out_features > 0
+rank > 0
+init ∈ {"xavier", "simple"}
 ```
 
-solve for `r`:
+It also warns when the selected rank may not provide parameter compression.
+
+The useful compression threshold is:
 
 ```text
-r = mn / [c(m + n)]
+rank < (in_features × out_features) / (in_features + out_features)
 ```
 
-The result must be rounded to a valid positive integer.
-
-Example:
+For example, for:
 
 ```text
-m = 784
-n = 256
-desired compression = 8
+in_features = 784
+out_features = 10
 ```
 
-Then:
+the maximum useful compression rank is approximately:
 
 ```text
-r = (784 × 256) / [8 × (784 + 256)]
+9.87
 ```
+
+So:
 
 ```text
-r ≈ 24.12
+rank = 8   → compressed
+rank = 10  → not compressed
 ```
-
-A practical choice could be:
-
-```text
-r = 24
-```
-
-### 11.3 Energy-Based Rank From SVD
-
-For a pretrained dense matrix:
-
-```text
-W = UΣVᵀ
-```
-
-the singular values are:
-
-```text
-σ₁ ≥ σ₂ ≥ ... ≥ σ_k
-```
-
-An energy-retention threshold can be used:
-
-```text
-retained_energy(r) =
-(Σ from i=1 to r of σᵢ²)
-/
-(Σ from i=1 to k of σᵢ²)
-```
-
-Choose the smallest rank `r` such that:
-
-```text
-retained_energy(r) ≥ threshold
-```
-
-Possible thresholds include:
-
-```text
-0.90
-0.95
-0.99
-```
-
-This strategy is useful when compressing an already-trained model.
-
-### 11.4 Validation-Based Rank
-
-Train or evaluate multiple ranks:
-
-```text
-r ∈ {4, 8, 16, 32, 64}
-```
-
-Then compare:
-
-* Validation loss
-* Accuracy
-* Parameter count
-* GPU memory
-* Training time
-* Inference time
-
-The best rank is selected according to the target deployment constraints.
 
 ---
 
-## 12. Two TensorFold Workflows
+## 13. Initialization
+
+Initialization is important because the effective weight is:
+
+```text
+W_effective = UV
+```
+
+If both `U` and `V` are initialized poorly, the effective weight scale can become too small or too large.
+
+The current implementation supports:
+
+```python
+mini.nn.TensorFoldLinear(784, 10, rank=4, init="xavier")
+```
+
+and:
+
+```python
+mini.nn.TensorFoldLinear(784, 10, rank=4, init="simple")
+```
+
+`xavier` is the default.
+
+### Xavier initialization
+
+The current implementation uses separate Xavier-style scales for `U` and `V`:
+
+```text
+U scale = sqrt(6 / (in_features + rank))
+V scale = sqrt(6 / (rank + out_features))
+```
+
+This produced better MNIST behavior than the earlier very small fixed-scale initialization.
+
+### Simple initialization
+
+The simple initializer uses a fixed small scale:
+
+```text
+U scale = 0.05
+V scale = 0.05
+```
+
+This is kept mainly for comparison and debugging.
+
+---
+
+## 14. Two TensorFold Workflows
 
 TensorFold should eventually support two different workflows.
 
 ### Workflow A: Train Factorized Layer From Scratch
+
+This workflow is implemented.
 
 Initialize `U` and `V` directly and train them as model parameters.
 
@@ -610,6 +630,8 @@ Challenges:
 * Low rank may restrict learning capacity
 
 ### Workflow B: Compress a Pretrained Dense Layer
+
+This workflow is future work.
 
 Start with a trained dense weight matrix:
 
@@ -659,7 +681,7 @@ The factors can then be:
 
 ---
 
-## 13. SVD Mathematics
+## 15. SVD Mathematics for Future Dense-to-TensorFold Conversion
 
 For a matrix:
 
@@ -731,9 +753,11 @@ Then:
 W_r = AB
 ```
 
+This is planned for a later milestone.
+
 ---
 
-## 14. Reconstruction Error
+## 16. Reconstruction Error
 
 For a dense weight matrix `W` and its approximation `W_r`, the Frobenius reconstruction error is:
 
@@ -763,9 +787,9 @@ The layer must also be evaluated within the full model.
 
 ---
 
-## 15. TensorFoldLinear API
+## 17. Current TensorFoldLinear API
 
-The initial planned API is:
+Current API:
 
 ```python
 class TensorFoldLinear(Module):
@@ -774,12 +798,12 @@ class TensorFoldLinear(Module):
         in_features,
         out_features,
         rank,
-        bias=True,
+        init="xavier",
     ):
         ...
 ```
 
-Expected usage:
+Usage:
 
 ```python
 layer = mini.nn.TensorFoldLinear(
@@ -789,12 +813,13 @@ layer = mini.nn.TensorFoldLinear(
 )
 ```
 
-Potential attributes:
+Current attributes:
 
 ```python
 layer.in_features
 layer.out_features
 layer.rank
+layer.init
 
 layer.U
 layer.V
@@ -805,83 +830,62 @@ Forward pass:
 
 ```python
 def forward(self, x):
-    out = (x @ self.U) @ self.V
-
-    if self.b is not None:
-        out = out + self.b
-
-    return out
+    hidden = x @ self.U
+    out = hidden @ self.V
+    return out + self.b
 ```
 
 Parameter collection:
 
 ```python
 def parameters(self):
-    params = [self.U, self.V]
-
-    if self.b is not None:
-        params.append(self.b)
-
-    return params
+    return [self.U, self.V, self.b]
 ```
 
----
-
-## 16. Initial Python Prototype
-
-The first version can be implemented entirely using existing MiniPyPy operations.
+Named parameter collection:
 
 ```python
-class TensorFoldLinear(Module):
-    def __init__(
-        self,
-        in_features,
-        out_features,
-        rank,
-        bias=True,
-    ):
-        if rank <= 0:
-            raise ValueError("rank must be positive")
-
-        max_rank = min(in_features, out_features)
-
-        if rank > max_rank:
-            raise ValueError(
-                "rank cannot exceed min(in_features, out_features)"
-            )
-
-        self.in_features = in_features
-        self.out_features = out_features
-        self.rank = rank
-
-        self.U = make_parameter(in_features, rank)
-        self.V = make_parameter(rank, out_features)
-
-        self.b = (
-            make_zero_parameter(1, out_features)
-            if bias
-            else None
-        )
-
-    def forward(self, x):
-        hidden = x @ self.U
-        output = hidden @ self.V
-
-        if self.b is not None:
-            output = output + self.b
-
-        return output
+def named_parameters(self):
+    return [
+        (self, "U", self.U),
+        (self, "V", self.V),
+        (self, "b", self.b),
+    ]
 ```
 
-The exact initialization helpers will depend on MiniPyPy's module utilities.
+Parameter count:
 
-The prototype should initially prioritize correctness over custom fused kernels.
+```python
+def parameter_count(self):
+    return (
+        self.in_features * self.rank
+        + self.rank * self.out_features
+        + self.out_features
+    )
+```
+
+Dense parameter count:
+
+```python
+def dense_parameter_count(self):
+    return (
+        self.in_features * self.out_features
+        + self.out_features
+    )
+```
+
+Compression ratio:
+
+```python
+def compression_ratio(self):
+    return self.dense_parameter_count() / self.parameter_count()
+```
 
 ---
 
-## 17. Autograd
+## 18. Autograd
 
-No new autograd operation is required for the first prototype.
+No new autograd operation is required for the current prototype.
 
 The forward pass consists of existing differentiable operations:
 
@@ -897,7 +901,7 @@ MiniPyPy already supports backward rules for:
 * Addition
 * Broadcasting
 
-The autograd graph will look like:
+The autograd graph looks like:
 
 ```text
 X -----\
@@ -930,111 +934,7 @@ Bias gradient is reduced over broadcast dimensions.
 
 ---
 
-## 18. Initialization
-
-Initialization is important because the effective weight is:
-
-```text
-W_effective = UV
-```
-
-If both `U` and `V` are initialized with very small values, their product may become excessively small.
-
-Possible initial strategies include:
-
-### Strategy A: Scale-Aware Random Factors
-
-Initialize both factors with variance chosen so that the product has a reasonable scale.
-
-A simple first approach may use:
-
-```text
-U scale ≈ 1 / sqrt(in_features)
-V scale ≈ 1 / sqrt(rank)
-```
-
-This must be validated experimentally.
-
-### Strategy B: Dense Initialization Followed by SVD
-
-1. Generate a normal dense initialization.
-2. Apply rank-`r` SVD.
-3. Store the resulting factors.
-
-This more closely matches the initialization statistics of a standard linear layer but requires an SVD implementation or external preprocessing.
-
-### Strategy C: One Random Factor and One Structured Factor
-
-One factor could be initialized randomly while the other starts close to an identity-like mapping where dimensions permit.
-
-This is more specialized and should not be the first implementation.
-
-The first prototype should use a simple documented initialization and verify that training loss decreases.
-
----
-
-## 19. Dense-to-TensorFold Conversion
-
-A future conversion utility could look like:
-
-```python
-compressed = mini.nn.TensorFoldLinear.from_linear(
-    dense_layer,
-    rank=16,
-)
-```
-
-Conceptual conversion:
-
-```text
-dense W
-   |
-   v
-SVD(W)
-   |
-   v
-truncate to rank r
-   |
-   v
-construct factor U
-   |
-   v
-construct factor V
-   |
-   v
-copy dense bias
-   |
-   v
-TensorFoldLinear
-```
-
-A model-level utility could recursively replace selected layers:
-
-```python
-compressed_model = mini.tensorfold.compress(
-    model,
-    rank=16,
-)
-```
-
-A more advanced API may allow per-layer rank configuration:
-
-```python
-compressed_model = mini.tensorfold.compress(
-    model,
-    ranks={
-        "layer1": 32,
-        "layer2": 16,
-        "classifier": 8,
-    },
-)
-```
-
-These APIs are future work and should not be implemented before the core layer is stable.
-
----
-
-## 20. Why the Full Weight Matrix Should Not Be Reconstructed
+## 19. Why the Full Weight Matrix Is Not Reconstructed
 
 A naive implementation could compute:
 
@@ -1053,7 +953,7 @@ That approach loses important TensorFold benefits because it:
 * Reduces inference efficiency
 * Defeats the purpose of storing only factors
 
-TensorFold should instead compute:
+TensorFoldLinear instead computes:
 
 ```text
 Y = (X @ U) @ V
@@ -1063,9 +963,9 @@ This directly contracts the factors with the input.
 
 ---
 
-## 21. Intermediate Activation Cost
+## 20. Intermediate Activation Cost
 
-TensorFold introduces an intermediate tensor:
+TensorFoldLinear introduces an intermediate tensor:
 
 ```text
 H = X @ U
@@ -1103,7 +1003,7 @@ Therefore benchmarks must distinguish between:
 
 ---
 
-## 22. When TensorFold May Not Help
+## 21. When TensorFold May Not Help
 
 TensorFold will not automatically improve every layer.
 
@@ -1123,7 +1023,7 @@ TensorFold should therefore replace layers selectively.
 
 ---
 
-## 23. Candidate Layers for Compression
+## 22. Candidate Layers for Compression
 
 Good initial candidates include:
 
@@ -1140,63 +1040,48 @@ Poor initial candidates include:
 * Layers whose parameters are a negligible part of the model
 * Layers where low-rank approximation causes severe accuracy loss
 
-The first MiniPyPy benchmark should remain small and understandable, even if the absolute runtime improvement is limited.
+The current MiniPyPy benchmark remains small and understandable, even though the absolute runtime improvement may be limited.
 
 ---
 
-## 24. First Benchmark
+## 23. Completed Benchmarks
 
-The first controlled benchmark should compare:
-
-```text
-Dense:
-mini.nn.Linear(784, 256)
-
-TensorFold:
-mini.nn.TensorFoldLinear(784, 256, rank=16)
-```
-
-Both models should use:
-
-* The same dataset
-* The same random seed where possible
-* The same number of epochs
-* The same batch size
-* The same optimizer
-* Comparable initialization
-* The same loss function
-* The same evaluation set
-
-Metrics should include:
-
-```text
-Parameter count
-Compression ratio
-Training loss
-Validation loss
-Training accuracy
-Validation accuracy
-Forward latency
-Training-step latency
-Peak GPU memory
-Final model-storage size
-```
-
----
-
-## 25. MNIST Prototype
-
-An initial model could be:
-
-```python
-model = mini.nn.Sequential(
-    mini.nn.TensorFoldLinear(784, 128, rank=16),
-    mini.nn.ReLU(),
-    mini.nn.Linear(128, 10),
-)
-```
+### Single-layer MNIST benchmark
 
 Dense baseline:
+
+```python
+model = mini.nn.Linear(784, 10)
+```
+
+TensorFold variants:
+
+```python
+model = mini.nn.TensorFoldLinear(784, 10, rank=r, init="xavier")
+```
+
+Benchmark setup:
+
+```text
+batch_size  = 32
+epochs      = 3
+train_limit = 2048
+test_limit  = 512
+optimizer   = SGD
+lr          = 0.1
+init        = Xavier
+```
+
+Observed result summary:
+
+```text
+rank=8 nearly matched the dense single-layer classifier while using fewer parameters.
+rank=10 reached slightly higher accuracy but was not a compression win.
+```
+
+### Dense MLP vs TensorFold MLP benchmark
+
+Dense MLP:
 
 ```python
 model = mini.nn.Sequential(
@@ -1206,49 +1091,55 @@ model = mini.nn.Sequential(
 )
 ```
 
-The first goal is not to prove universal superiority.
+TensorFold variants replace one or both dense layers with `TensorFoldLinear`.
 
-The first goal is to verify that:
+Benchmark setup:
 
-1. Forward shapes are correct.
-2. Gradients reach both factors.
-3. Loss decreases.
-4. Optimizers update both factors.
-5. The layer trains end to end.
-6. Parameter count is reduced.
-7. Accuracy and runtime can be measured reliably.
+```text
+batch_size  = 32
+epochs      = 3
+train_limit = 2048
+test_limit  = 512
+optimizer   = Adam
+lr          = 0.001
+init        = Xavier
+```
+
+Key observed result:
+
+```text
+TensorFold MLP r32/r10 reached dense-level accuracy while using about 3.31x fewer parameters.
+```
+
+Important interpretation:
+
+```text
+Compressing every layer is not always optimal.
+Compressing large dense layers gives the best parameter savings.
+Small final classifier layers may sometimes be better left dense or given higher rank.
+```
 
 ---
 
-## 26. Required Tests
+## 24. Required Tests
 
-### Constructor Tests
+Implemented tests currently verify:
 
-Verify:
+* Forward output shape
+* Parameter list
+* Named parameter list
+* Parameter count
+* Training reduces CrossEntropyLoss
+* Simple initialization works
+* Xavier initialization works
+* Unknown initialization is rejected
+* Invalid `in_features` is rejected
+* Invalid `out_features` is rejected
+* Default initialization is Xavier
 
-```text
-U shape = [in_features, rank]
-V shape = [rank, out_features]
-bias shape = [1, out_features]
-```
+Additional future TensorFold tests should include:
 
-Reject:
-
-```text
-rank <= 0
-rank > min(in_features, out_features)
-in_features <= 0
-out_features <= 0
-```
-
-### Forward Shape Test
-
-```text
-input:  [batch, in_features]
-output: [batch, out_features]
-```
-
-### Numerical Equivalence Test
+### Dense Equivalence Test
 
 Set:
 
@@ -1278,28 +1169,13 @@ input
 
 Compare selected small cases against finite differences or a trusted reference implementation.
 
-### Training Test
-
-Verify that TensorFoldLinear reduces a simple regression or classification loss.
-
-### Parameter Count Test
-
-Verify:
-
-```text
-actual factor parameters =
-in_features × rank
-+ rank × out_features
-+ bias parameters
-```
-
 ### Compression Test
 
-Verify the reported compression ratio matches the mathematical formula.
+Verify the reported compression ratio matches the mathematical formula across multiple layer sizes and ranks.
 
 ---
 
-## 27. Benchmark Methodology
+## 25. Benchmark Methodology
 
 CUDA operations are asynchronous.
 
@@ -1334,40 +1210,72 @@ TensorFold claims should be based on repeatable measurements rather than a singl
 
 ---
 
-## 28. Implementation Phases
+## 26. Completed and Future Implementation Phases
 
 ### Phase 1: Mathematics and API
 
-* Finalize factor orientation
-* Define rank validation
-* Define parameter-count formulas
-* Define compression-ratio reporting
-* Document initialization
+Status: complete for low-rank TensorFoldLinear.
+
+Completed:
+
+* Factor orientation
+* Rank validation
+* Parameter-count formulas
+* Compression-ratio reporting
+* Initialization design
+* Documentation
 
 ### Phase 2: Python Prototype
 
-* Implement `TensorFoldLinear` using existing matmul
-* Add it to `mini.nn`
-* Add constructor and forward tests
-* Add gradient tests
-* Add training test
+Status: complete.
+
+Completed:
+
+* Implemented `TensorFoldLinear` using existing matmul
+* Added it to `mini.nn`
+* Added constructor and forward tests
+* Added training test
+* Added initialization tests
+* Added validation tests
 
 ### Phase 3: Dense Comparison
 
-* Create equivalent dense baseline
-* Compare parameter counts
-* Compare outputs when `W = UV`
-* Compare training behavior
+Status: partially complete.
+
+Completed:
+
+* Compared parameter counts
+* Compared dense MLP against TensorFold MLP variants
+* Benchmarked several ranks
+
+Future:
+
+* Add dense-equivalence output test where `W = U @ V`
+* Add more gradient reference tests
 
 ### Phase 4: MNIST Experiment
 
-* Train dense and factorized models
-* Evaluate several ranks
-* Record loss and accuracy
-* Record parameter count
-* Record execution time
+Status: complete for first prototype.
+
+Completed:
+
+* Trained dense and factorized models
+* Evaluated several ranks
+* Recorded loss and accuracy
+* Recorded parameter count
+* Compared against dense baseline
+
+Future:
+
+* Add timing measurements
+* Add peak GPU memory measurements
+* Add repeated-seed benchmark summaries
 
 ### Phase 5: Pretrained Compression
+
+Status: future work.
+
+Planned:
 
 * Add an SVD conversion workflow
 * Convert a trained dense layer
@@ -1377,6 +1285,10 @@ TensorFold claims should be based on repeatable measurements rather than a singl
 
 ### Phase 6: CUDA Optimization
 
+Status: future work.
+
+Planned:
+
 * Profile both matmuls
 * Inspect memory-pool behavior
 * Evaluate fused execution possibilities
@@ -1384,6 +1296,10 @@ TensorFold claims should be based on repeatable measurements rather than a singl
 * Consider specialized kernels only after profiling
 
 ### Phase 7: Higher-Order TensorFold
+
+Status: future work.
+
+Planned:
 
 * Investigate tensorization of weight matrices
 * Study Tucker decomposition
@@ -1393,9 +1309,9 @@ TensorFold claims should be based on repeatable measurements rather than a singl
 
 ---
 
-## 29. Potential Fused CUDA Kernel
+## 27. Potential Fused CUDA Kernel
 
-The first TensorFold implementation should use two ordinary matmuls:
+The current TensorFold implementation uses two ordinary matmuls:
 
 ```text
 H = X @ U
@@ -1426,9 +1342,9 @@ A fused kernel should only be implemented after profiling demonstrates a clear b
 
 ---
 
-## 30. Higher-Order Tensor Decompositions
+## 28. Higher-Order Tensor Decompositions
 
-Low-rank SVD factorization is appropriate for a two-dimensional matrix.
+Low-rank matrix factorization is appropriate for a two-dimensional matrix.
 
 Future TensorFold versions may tensorize a large matrix into multiple modes.
 
@@ -1480,7 +1396,7 @@ They should follow, not precede, a successful `TensorFoldLinear` prototype.
 
 ---
 
-## 31. Tensor Train Direction
+## 29. Tensor Train Direction
 
 A Tensor Train representation uses cores:
 
@@ -1518,7 +1434,7 @@ Tensor Train is a later TensorFold milestone.
 
 ---
 
-## 32. Research Questions
+## 30. Research Questions
 
 TensorFold should investigate the following questions experimentally:
 
@@ -1540,7 +1456,7 @@ TensorFold should investigate the following questions experimentally:
 
 ---
 
-## 33. Success Criteria
+## 31. Success Criteria
 
 The first TensorFold milestone is successful when:
 
@@ -1552,21 +1468,29 @@ and:
 
 * It stores factor matrices instead of a full weight matrix
 * Forward execution does not reconstruct the full matrix
-* Autograd computes correct gradients
+* Autograd computes gradients through the factorized path
 * SGD and Adam can train the factors
 * Unit tests pass
-* A dense-equivalence test passes
 * Parameter-count reduction is reported
 * An MNIST model trains successfully
 * Accuracy is compared against a dense baseline
-* Runtime is benchmarked honestly
 * Limitations are documented
+
+For the current `v0.9.0` stage, this milestone is substantially complete.
+
+Remaining improvements:
+
+* Add dense-equivalence test
+* Add explicit gradient-presence tests for U, V, bias, and input
+* Add timing benchmarks
+* Add memory benchmarks
+* Add repeated-seed benchmark runs
 
 ---
 
-## 34. Non-Goals for the First Version
+## 32. Non-Goals for the First TensorFold Version
 
-The first TensorFold release will not attempt to provide:
+The first TensorFold release does not attempt to provide:
 
 * Automatic compression of every model type
 * Convolution decomposition
@@ -1584,18 +1508,20 @@ These features may be explored after the basic layer is stable.
 
 ---
 
-## 35. Proposed Roadmap
+## 33. Proposed Roadmap
 
 ```text
 v0.9.0
 TensorFoldLinear low-rank prototype
+
+v0.9.1
+TensorFoldLinear documentation, tests, and packaging cleanup
 
 v0.10.0
 True tensorized / Tensor Train Linear prototype
 
 v0.11.0
 Pretrained dense-to-TensorFold compression
-
 
 v0.12.0
 Rank-selection utilities and compression reports
@@ -1608,7 +1534,7 @@ The exact version numbers may change as MiniPyPy evolves.
 
 ---
 
-## 36. Core Design Principle
+## 34. Core Design Principle
 
 TensorFold's defining principle is:
 
@@ -1618,7 +1544,7 @@ Operate on factors directly.
 Never reconstruct the full dense weight during normal execution.
 ```
 
-The initial computational path is:
+The current computational path is:
 
 ```text
 Input X
