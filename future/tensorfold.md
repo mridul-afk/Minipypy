@@ -1588,16 +1588,14 @@ These features may be explored after the basic layer is stable.
 
 ```text
 v0.9.0
-TensorFoldLinear Python prototype
-
-v0.9.x
-Correctness, gradient, and training tests
+TensorFoldLinear low-rank prototype
 
 v0.10.0
-Dense vs TensorFold MNIST benchmark
+True tensorized / Tensor Train Linear prototype
 
 v0.11.0
-Pretrained dense-layer SVD conversion
+Pretrained dense-to-TensorFold compression
+
 
 v0.12.0
 Rank-selection utilities and compression reports

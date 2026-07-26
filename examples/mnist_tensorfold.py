@@ -2,7 +2,7 @@ import random
 import minipypy as mini
 
 
-def load_mnist_from_torchvision(batch_size=32, train=True, limit=None):
+def load_mnist_from_torchvision(batch_size=32, train=True, limit=None, seed = 123):
     """
     Uses torchvision only for dataset loading.
 
@@ -34,7 +34,8 @@ def load_mnist_from_torchvision(batch_size=32, train=True, limit=None):
     indices = list(range(len(dataset)))
 
     if train:
-        random.shuffle(indices)
+        rng = random.Random(seed)
+        rng.shuffle(indices)
 
     if limit is not None:
         indices = indices[:limit]

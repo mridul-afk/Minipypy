@@ -1,8 +1,12 @@
 # MiniPyPy
 
-MiniPyPy is a minimal PyTorch-like deep learning framework built with a custom C++/CUDA tensor engine, Python bindings, reverse-mode autograd, and a growing high-level neural network API.
+MiniPyPy is a minimal PyTorch-like deep learning framework built from scratch using a custom C++/CUDA tensor engine, Python bindings through pybind11, reverse-mode autograd, and a growing high-level neural network API.
 
-The goal of MiniPyPy is to build a small but understandable CUDA-backed deep learning framework from scratch, then extend it with TensorFold low-rank neural network layers.
+The goal of MiniPyPy is to build a small but understandable CUDA-backed deep learning framework from scratch, then extend it with TensorFold compressed neural-network layers.
+
+TensorFold is a subsystem inside MiniPyPy. It is not a separate framework.
+
+---
 
 ## Current Status
 
@@ -29,14 +33,15 @@ MiniPyPy currently supports:
 * HingeLoss
 * CrossEntropyLoss
 * BCEWithLogitsLoss
-* MNIST linear training example
+* MNIST linear training examples
 * TensorFoldLinear low-rank layer prototype
-* TensorFoldLinear MNIST benchmark
+* TensorFoldLinear single-layer MNIST benchmark
+* Dense MLP vs TensorFold MLP benchmark
 
 Latest milestone:
 
 ```text
-v0.9.0 — TensorFoldLinear Prototype
+v0.9.0 — TensorFoldLinear Low-Rank Prototype
 ```
 
 Full test suite:
@@ -45,43 +50,54 @@ Full test suite:
 85 passed
 ```
 
-Verified training example:
+---
+
+## What TensorFold Currently Implements
+
+TensorFold currently implements a first low-rank `TensorFoldLinear` prototype.
+
+A normal dense Linear layer stores one full weight matrix:
 
 ```text
-MNIST Linear Classifier with SGD:
-test_acc ≈ 86.72% on a 512-sample test subset
-
-MNIST Linear Classifier with Adam:
-test_acc ≈ 82.62% on a 512-sample test subset
+W: [in_features, out_features]
 ```
 
-## Example
+TensorFoldLinear replaces that matrix with two trainable low-rank factors:
 
-```python
-import minipypy as mini
-
-x = mini.Tensor([[1.0], [2.0], [3.0], [4.0]])
-y = mini.Tensor([[2.0], [4.0], [6.0], [8.0]])
-
-model = mini.nn.Sequential(
-    mini.nn.Linear(1, 4),
-    mini.nn.ReLU(),
-    mini.nn.Linear(4, 1),
-)
-
-loss_fn = mini.nn.MSELoss()
-optimizer = mini.optim.Adam(model, lr=0.05)
-
-for epoch in range(100):
-    pred = model(x)
-    loss = loss_fn(pred, y)
-
-    optimizer.zero_grad()
-    loss.backward()
-    optimizer.step()
-
-print("Final loss:", loss_fn(model(x), y))
+```text
+U: [in_features, rank]
+V: [rank, out_features]
 ```
+
+Dense Linear computes:
+
+```text
+Y = XW + b
+```
+
+TensorFoldLinear computes:
+
+```text
+Y = (XU)V + b
+```
+
+The full dense matrix `W` is not stored during normal forward execution.
+
+This first implementation is **low-rank matrix factorization**.
+
+MiniPyPy does **not** yet implement full tensor decomposition methods such as:
+
+```text
+CP decomposition
+Tucker decomposition
+Tensor Train decomposition
+TT-SVD
+HOSVD
+```
+
+Those are planned for future TensorFold versions.
+
+---
 
 ## Installation
 
@@ -112,6 +128,8 @@ Or use the project build script:
 .\build.ps1 -sync
 ```
 
+---
+
 ## Requirements
 
 MiniPyPy currently requires:
@@ -125,6 +143,38 @@ MiniPyPy currently requires:
 * scikit-build-core
 
 The current development setup uses CUDA 13.0.
+
+---
+
+## Quick Example
+
+```python
+import minipypy as mini
+
+x = mini.Tensor([[1.0], [2.0], [3.0], [4.0]])
+y = mini.Tensor([[2.0], [4.0], [6.0], [8.0]])
+
+model = mini.nn.Sequential(
+    mini.nn.Linear(1, 4),
+    mini.nn.ReLU(),
+    mini.nn.Linear(4, 1),
+)
+
+loss_fn = mini.nn.MSELoss()
+optimizer = mini.optim.Adam(model, lr=0.05)
+
+for epoch in range(100):
+    pred = model(x)
+    loss = loss_fn(pred, y)
+
+    optimizer.zero_grad()
+    loss.backward()
+    optimizer.step()
+
+print("Final loss:", loss_fn(model(x), y))
+```
+
+---
 
 ## Tensor API
 
@@ -191,6 +241,8 @@ print(x.ndim())
 print(x.numel())
 ```
 
+---
+
 ## Autograd
 
 MiniPyPy supports reverse-mode autograd.
@@ -249,6 +301,8 @@ Enable gradients on a tensor:
 x = x.requires_grad_(True)
 ```
 
+---
+
 ## Matmul
 
 ```python
@@ -287,88 +341,7 @@ out = a @ b
 print(out.shape())
 ```
 
-## ReLU
-
-ReLU is implemented as a CUDA-backed operation with autograd support.
-
-```python
-x = mini.Tensor([-2.0, -1.0, 0.0, 1.0, 2.0], requires_grad=True)
-
-y = x.relu()
-loss = y.sum()
-
-loss.backward()
-
-print(y.cpu())
-print(x.grad().cpu())
-```
-
-Expected output:
-
-```text
-[0.0, 0.0, 0.0, 1.0, 2.0]
-[0.0, 0.0, 0.0, 1.0, 1.0]
-```
-
-At `x = 0`, MiniPyPy uses gradient `0`.
-
-## Softmax
-
-Softmax is implemented as a CUDA-backed N-D operation with autograd support.
-
-```python
-x = mini.Tensor([[1.0, 2.0, 3.0]], requires_grad=True)
-
-y = x.softmax(dim=1)
-
-print(y.cpu())
-```
-
-Functional API:
-
-```python
-y = mini.nn.functional.softmax(x, dim=1)
-```
-
-Module API:
-
-```python
-softmax = mini.nn.Softmax(dim=1)
-y = softmax(x)
-```
-
-Softmax supports positive and negative dimensions:
-
-```python
-x.softmax(dim=0)
-x.softmax(dim=1)
-x.softmax(dim=-1)
-```
-
-## sqrt
-
-`sqrt()` is implemented as a CUDA-backed tensor operation with autograd support.
-
-It is mainly used by the Adam optimizer.
-
-```python
-x = mini.Tensor([1.0, 4.0, 9.0, 16.0], requires_grad=True)
-
-y = x.sqrt()
-loss = y.sum()
-
-loss.backward()
-
-print(y.cpu())
-print(x.grad().cpu())
-```
-
-Expected output:
-
-```text
-[1.0, 2.0, 3.0, 4.0]
-[0.5, 0.25, 0.166666..., 0.125]
-```
+---
 
 ## Neural Network API
 
@@ -407,6 +380,8 @@ mini.optim.SGD
 mini.optim.Adam
 ```
 
+---
+
 ## Linear Layer
 
 ```python
@@ -423,11 +398,20 @@ Internally:
 out = x @ W + b
 ```
 
+where:
+
+```text
+W: [in_features, out_features]
+b: [1, out_features]
+```
+
+---
+
 ## TensorFoldLinear Layer
 
 TensorFoldLinear is MiniPyPy's first TensorFold layer prototype.
 
-A normal dense linear layer stores one full weight matrix:
+A normal dense Linear layer stores one full weight matrix:
 
 ```text
 W: [in_features, out_features]
@@ -457,6 +441,8 @@ The full dense matrix `W` is never stored during normal forward execution.
 Example:
 
 ```python
+import minipypy as mini
+
 layer = mini.nn.TensorFoldLinear(784, 10, rank=4)
 
 x = mini.Tensor([[0.0 for _ in range(784)]])
@@ -476,6 +462,26 @@ TensorFold params = 784 × 4 + 4 × 10 + 10 = 3,186
 Dense params      = 784 × 10 + 10 = 7,850
 Compression       ≈ 2.46x
 ```
+
+TensorFoldLinear uses Xavier initialization by default:
+
+```python
+layer = mini.nn.TensorFoldLinear(784, 10, rank=4)
+```
+
+This is equivalent to:
+
+```python
+layer = mini.nn.TensorFoldLinear(784, 10, rank=4, init="xavier")
+```
+
+A simple fixed-scale initialization is also available:
+
+```python
+layer = mini.nn.TensorFoldLinear(784, 10, rank=4, init="simple")
+```
+
+---
 
 ## Sequential
 
@@ -500,7 +506,20 @@ len(model)
 model[index]
 ```
 
-## MSELoss
+---
+
+## Loss Functions
+
+MiniPyPy currently supports:
+
+```text
+MSELoss
+HingeLoss
+CrossEntropyLoss
+BCEWithLogitsLoss
+```
+
+### MSELoss
 
 ```python
 loss_fn = mini.nn.MSELoss()
@@ -509,19 +528,13 @@ pred = model(x)
 loss = loss_fn(pred, y)
 ```
 
-Functional version:
-
-```python
-loss = mini.nn.functional.mse_loss(pred, y)
-```
-
 Formula:
 
 ```text
 loss = mean((pred - target)^2)
 ```
 
-## HingeLoss
+### HingeLoss
 
 HingeLoss is useful for binary classification-style objectives.
 
@@ -531,7 +544,7 @@ Targets should be `-1` or `+1`.
 pred = mini.Tensor([[2.0], [-1.0], [0.5]], requires_grad=True)
 target = mini.Tensor([[1.0], [-1.0], [1.0]])
 
-loss = mini.nn.functional.hinge_loss(pred, target)
+loss = mini.nn.HingeLoss()(pred, target)
 
 loss.backward()
 
@@ -545,14 +558,7 @@ Formula:
 loss = mean(relu(1 - target * pred))
 ```
 
-Module version:
-
-```python
-loss_fn = mini.nn.HingeLoss()
-loss = loss_fn(pred, target)
-```
-
-## CrossEntropyLoss
+### CrossEntropyLoss
 
 CrossEntropyLoss is used for multi-class classification.
 
@@ -579,19 +585,12 @@ logits = mini.Tensor([
 
 target = mini.Tensor([2.0, 0.0])
 
-loss = mini.nn.functional.cross_entropy(logits, target)
+loss = mini.nn.CrossEntropyLoss()(logits, target)
 
 loss.backward()
 
 print(loss.cpu())
 print(logits.grad().cpu())
-```
-
-Module version:
-
-```python
-loss_fn = mini.nn.CrossEntropyLoss()
-loss = loss_fn(logits, target)
 ```
 
 MiniPyPy implements CrossEntropyLoss as a fused stable CUDA operation using:
@@ -606,7 +605,7 @@ The backward formula is:
 grad_logits = (softmax(logits) - one_hot(target)) / batch_size
 ```
 
-## BCEWithLogitsLoss
+### BCEWithLogitsLoss
 
 BCEWithLogitsLoss is used for binary classification and multi-label classification.
 
@@ -628,19 +627,12 @@ Example:
 logits = mini.Tensor([2.0, -1.0, 0.0], requires_grad=True)
 target = mini.Tensor([1.0, 0.0, 1.0])
 
-loss = mini.nn.functional.binary_cross_entropy_with_logits(logits, target)
+loss = mini.nn.BCEWithLogitsLoss()(logits, target)
 
 loss.backward()
 
 print(loss.cpu())
 print(logits.grad().cpu())
-```
-
-Module version:
-
-```python
-loss_fn = mini.nn.BCEWithLogitsLoss()
-loss = loss_fn(logits, target)
 ```
 
 MiniPyPy implements BCEWithLogitsLoss as a fused stable CUDA operation using:
@@ -655,22 +647,7 @@ The backward formula is:
 grad_logits = (sigmoid(logits) - target) / num_elements
 ```
 
-Multi-label example:
-
-```python
-logits = mini.Tensor([
-    [2.0, -1.0, 0.0],
-    [-2.0, 3.0, 1.0],
-], requires_grad=True)
-
-target = mini.Tensor([
-    [1.0, 0.0, 1.0],
-    [0.0, 1.0, 1.0],
-])
-
-loss = mini.nn.BCEWithLogitsLoss()(logits, target)
-loss.backward()
-```
+---
 
 ## Optimizers
 
@@ -718,7 +695,9 @@ param = param - lr * m_hat / (sqrt(v_hat) + eps)
 
 Currently, optimizers take the model object directly because parameter updates replace tensors rather than mutating them in-place.
 
-## MNIST Training Example
+---
+
+## MNIST Linear Classifier Example
 
 MiniPyPy can train a simple MNIST linear classifier using its own tensor, autograd, loss, and optimizer stack.
 
@@ -779,48 +758,23 @@ epoch 2 summary: train_loss=0.9367 train_acc=0.8179 test_loss=0.8461 test_acc=0.
 epoch 3 summary: train_loss=0.7047 train_acc=0.8501 test_loss=0.6977 test_acc=0.8262
 ```
 
-## TensorFoldLinear MNIST Benchmark
+---
 
-TensorFoldLinear was benchmarked against a dense MNIST linear classifier.
+## TensorFoldLinear Single-Layer MNIST Benchmark
 
-The dense baseline uses:
+This benchmark compares a dense single-layer MNIST classifier against TensorFoldLinear classifiers with different ranks.
+
+Dense baseline:
 
 ```python
 model = mini.nn.Linear(784, 10)
 ```
 
-The TensorFold variants use:
+TensorFold variants:
 
 ```python
-model = mini.nn.TensorFoldLinear(784, 10, rank=r)
+model = mini.nn.TensorFoldLinear(784, 10, rank=r, init="xavier")
 ```
-
-TensorFoldLinear replaces a dense Linear weight matrix:
-
-```text
-W: [in_features, out_features]
-```
-
-with two trainable low-rank factors:
-
-```text
-U: [in_features, rank]
-V: [rank, out_features]
-```
-
-Instead of computing:
-
-```text
-Y = XW + b
-```
-
-TensorFoldLinear computes:
-
-```text
-Y = (XU)V + b
-```
-
-The full dense matrix `W` is never stored during normal forward execution.
 
 Benchmark setup:
 
@@ -831,24 +785,131 @@ train_limit = 2048
 test_limit  = 512
 optimizer   = SGD
 lr          = 0.1
+init        = Xavier
+```
+
+Single-layer dense baseline:
+
+```text
+Dense Linear(784, 10)
+Params:      7,850
+Compression: 1.00x
+Test Acc:    ~86.72%
+```
+
+TensorFoldLinear rank benchmark:
+
+| Model                    | Params | Compression | Test Accuracy |
+| ------------------------ | -----: | ----------: | ------------: |
+| TensorFoldLinear rank=2  |  1,598 |       4.91x |        60.35% |
+| TensorFoldLinear rank=4  |  3,186 |       2.46x |        76.95% |
+| TensorFoldLinear rank=8  |  6,362 |       1.23x |        86.33% |
+| TensorFoldLinear rank=10 |  7,950 |       0.99x |        86.91% |
+
+On this small benchmark, `TensorFoldLinear rank=8` nearly matched the dense single-layer classifier while using fewer parameters.
+
+`rank=10` reached slightly higher accuracy, but it is not a compression win because it uses more parameters than the dense layer.
+
+---
+
+## Dense MLP vs TensorFold MLP Benchmark
+
+This benchmark compares a dense two-layer MLP against several TensorFold MLP variants.
+
+Dense MLP:
+
+```python
+model = mini.nn.Sequential(
+    mini.nn.Linear(784, 128),
+    mini.nn.ReLU(),
+    mini.nn.Linear(128, 10),
+)
+```
+
+TensorFold MLP variants replace one or both dense layers with `TensorFoldLinear`.
+
+Benchmark setup:
+
+```text
+batch_size  = 32
+epochs      = 3
+train_limit = 2048
+test_limit  = 512
+optimizer   = Adam
+lr          = 0.001
+init        = Xavier
 ```
 
 Results:
 
-| Model | Params | Compression | Test Accuracy |
-|---|---:|---:|---:|
-| Dense MLP | 101,770 | 1.00x | 85.55% |
-| TensorFold MLP r16/r8 | 15,834 | 6.43x | 83.40% |
-| TensorFold MLP r32/r8 | 30,426 | 3.34x | 83.79% |
-| TensorFold MLP r32/r10 | 30,702 | 3.31x | 86.13% |
-| TensorFold first layer r32 | 30,602 | 3.33x | 84.96% |
+| Model                      |  Params | Compression | Test Accuracy |
+| -------------------------- | ------: | ----------: | ------------: |
+| Dense MLP                  | 101,770 |       1.00x |        85.55% |
+| TensorFold MLP r16/r8      |  15,834 |       6.43x |        83.40% |
+| TensorFold MLP r32/r8      |  30,426 |       3.34x |        83.79% |
+| TensorFold MLP r32/r10     |  30,702 |       3.31x |        86.13% |
+| TensorFold first layer r32 |  30,602 |       3.33x |        84.96% |
 
-TensorFold MLP r32/r10 reached dense-level accuracy with 3.31x fewer parameters on the small MNIST benchmark.
+On this small MNIST benchmark, `TensorFold MLP r32/r10` reached dense-level accuracy while using about `3.31x` fewer parameters.
+
+The key observation is:
 
 ```text
-With Xavier initialization, TensorFoldLinear rank=8 nearly matches the dense Linear baseline while using fewer parameters.
-Rank 10 reaches slightly higher accuracy, but it is not a compression win because it uses more parameters than the dense layer.
+Compressing every layer is not always optimal.
+Compressing large dense layers gives the best parameter savings.
+Small final classifier layers may sometimes be better left dense or given higher rank.
 ```
+
+---
+
+## TensorFold Interpretation
+
+The current TensorFoldLinear result demonstrates that MiniPyPy can train compressed low-rank neural networks from scratch.
+
+The current workflow is:
+
+```text
+random factor initialization
+        |
+        v
+train U and V directly
+        |
+        v
+factorized forward pass
+        |
+        v
+MiniPyPy autograd
+        |
+        v
+SGD or Adam optimizer
+```
+
+This is different from pretrained compression.
+
+MiniPyPy does not yet take an already-trained dense PyTorch model and compress it through SVD or tensor decomposition. That is future work.
+
+Current workflow:
+
+```text
+Train factorized model from scratch
+```
+
+Future workflow:
+
+```text
+Take pretrained dense model
+        |
+        v
+decompose dense weights
+        |
+        v
+replace layers with TensorFold layers
+        |
+        v
+fine-tune or run compressed inference
+```
+
+---
 
 ## Tests
 
@@ -864,21 +925,49 @@ Expected result for the current development snapshot:
 85 passed
 ```
 
+---
+
 ## Project Roadmap
 
-Near-term roadmap:
+Current milestone:
 
 ```text
-v0.9.0 — TensorFoldLinear prototype
+v0.9.0 — TensorFoldLinear low-rank prototype
 ```
 
-Planned work before the next public release:
+Completed in this milestone:
 
 ```text
-- Keep Dense Linear vs TensorFoldLinear benchmark results documented
-- Create a separate examples/mnist_tensorfold.py benchmark script
-- Improve TensorFoldLinear initialization experiments
-- Begin SVD-based compression experiments from trained dense weights
+TensorFoldLinear layer
+Xavier initialization
+Parameter-count reporting
+Compression-ratio reporting
+Single-layer TensorFold MNIST benchmark
+Dense MLP vs TensorFold MLP benchmark
+```
+
+Near-term next milestone:
+
+```text
+v0.10.0 — Tensorized / Tensor Decomposition Layer Prototype
+```
+
+Planned next work:
+
+```text
+- Improve TensorFold benchmark reproducibility
+- Add more TensorFoldLinear tests
+- Add gradient checks for U, V, and bias
+- Explore true tensorized layers
+- Begin Tensor Train Linear design
+```
+
+Later milestones:
+
+```text
+v0.11.0 — Dense-to-TensorFold conversion
+v0.12.0 — SVD-based pretrained compression experiments
+Later   — CP, Tucker, Tensor Train, CUDA optimizations
 ```
 
 Long-term goals:
@@ -891,51 +980,57 @@ Long-term goals:
 * More loss functions
 * Sigmoid, tanh, exp, and log primitive APIs
 * Convolution layers
-* TensorFold low-rank layers and SVD-based compression experiments
+* TensorFold low-rank and tensor-decomposition layers
+* Dense-to-TensorFold conversion utilities
+* SVD-based compression experiments
 * CUDA kernel optimization
 * Possible cuBLAS/cuDNN integration
 * Broadcast kernel metadata optimization using CUDA constant memory
 
-## TensorFold Direction
+---
 
-The long-term research goal is to integrate TensorFold layers into MiniPyPy.
+## Future TensorFold Direction
 
-Instead of only using normal dense layers like:
+The long-term TensorFold research goal is to integrate compressed and factorized neural-network layers directly into MiniPyPy.
 
-```text
-y = xW + b
-```
-
-MiniPyPy will eventually support low-rank dense replacements:
-
-```python
-model = mini.nn.Sequential(
-    mini.nn.TensorFoldLinear(784, 256, rank=8),
-    mini.nn.ReLU(),
-    mini.nn.TensorFoldLinear(256, 10, rank=4),
-)
-```
-
-The goal is to reduce parameter count and memory usage while keeping training and inference GPU-backed.
-
-Potential first TensorFold target:
+The current first step is low-rank matrix factorization:
 
 ```text
-Dense Linear:
-W shape = [in_features, out_features]
-
-TensorFoldLinear:
-factorized low-rank representation of W
+W ≈ U @ V
 ```
 
-Initial benchmark goal:
+Future TensorFold versions may support higher-order tensor decomposition methods.
+
+A dense matrix:
 
 ```text
-Dense Linear(784, 10)
-vs
-TensorFoldLinear(784, 10)
-on MNIST
+W: [in_features, out_features]
 ```
+
+may be tensorized into a higher-order representation:
+
+```text
+W_tensor: [i1, i2, ..., id, o1, o2, ..., od]
+```
+
+where:
+
+```text
+in_features  = i1 × i2 × ... × id
+out_features = o1 × o2 × ... × od
+```
+
+Possible future decomposition methods include:
+
+```text
+CP decomposition
+Tucker decomposition
+Tensor Train decomposition
+```
+
+Tensor Train is likely the best next decomposition target for neural-network layer compression.
+
+---
 
 ## Future Optimization Notes
 
@@ -959,6 +1054,8 @@ Tensor data itself should remain in global memory.
 
 This optimization should be benchmarked later and is not required before TensorFold.
 
+---
+
 ## Known Limitations
 
 MiniPyPy is still experimental.
@@ -974,11 +1071,17 @@ Current limitations:
 * Parameter updates currently replace tensors instead of mutating them in-place
 * Optimizer state is currently managed at the Python layer
 * Some internal cloning paths still use CPU roundtrips and can be optimized later
+* CUDA error handling is not yet centralized
+* Memory pool does not yet support block splitting or stream-aware reuse
 * API and internals may change frequently
+
+---
 
 ## License
 
 This project is licensed under the MIT License. See the `LICENSE` file for details.
+
+---
 
 ## Status
 
