@@ -81,6 +81,12 @@ class TensorFoldLinear(Module):
         if rank <= 0:
             raise ValueError("rank must be greater than 0")
 
+        if in_features <= 0:
+            raise ValueError("in_features must be greater than 0")
+
+        if out_features <= 0:
+            raise ValueError("out_features must be greater than 0")
+
         if init not in ["simple", "xavier"]:
             raise ValueError("init must be either 'simple' or 'xavier'")
 

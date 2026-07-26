@@ -100,3 +100,24 @@ def test_tensorfold_linear_rejects_unknown_init():
         assert False
     except ValueError as error:
         assert "init must be either" in str(error)
+
+def test_tensorfold_linear_rejects_invalid_in_features():
+    try:
+        mini.nn.TensorFoldLinear(0, 3, rank=2)
+        assert False
+    except ValueError as error:
+        assert "in_features must be greater than 0" in str(error)
+
+
+def test_tensorfold_linear_rejects_invalid_out_features():
+    try:
+        mini.nn.TensorFoldLinear(4, 0, rank=2)
+        assert False
+    except ValueError as error:
+        assert "out_features must be greater than 0" in str(error)
+
+
+def test_tensorfold_linear_default_init_is_xavier():
+    layer = mini.nn.TensorFoldLinear(4, 3, rank=2)
+
+    assert layer.init == "xavier"
