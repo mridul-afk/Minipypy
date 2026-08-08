@@ -11,6 +11,8 @@ __pycache__/
 # Virtual environments
 venv/
 wheeltest/
+pypi-test/
+build-test/
 
 # CMake
 CMakeUserPresets.json
