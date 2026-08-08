@@ -21,20 +21,37 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Setup CUDA
-        uses: Jimver/cuda-toolkit@v0.2.24
-        with:
-          cuda: "13.3.1"
+      - name: Install CUDA Toolkit
+        shell: powershell
+        run: |
+          Invoke-WebRequest `
+            -Uri "https://developer.download.nvidia.com/compute/cuda/13.3.0/network_installers/cuda_13.3.0_windows_network.exe" `
+            -OutFile "$env:TEMP\cuda_installer.exe"
+
+          Start-Process `
+            -FilePath "$env:TEMP\cuda_installer.exe" `
+            -ArgumentList "-s" `
+            -Wait `
+            -NoNewWindow
+
+      - name: Setup CUDA environment
+        shell: powershell
+        run: |
+          $cudaPath = "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.3"
+
+          echo "CUDA_PATH=$cudaPath" >> $env:GITHUB_ENV
+          echo "$cudaPath\bin" >> $env:GITHUB_PATH
+
+      - name: Verify CUDA
+        shell: powershell
+        run: |
+          nvcc --version
+          where.exe nvcc
 
       - name: Install build dependencies
         run: |
           python -m pip install --upgrade pip
           python -m pip install build scikit-build-core pybind11 wheel twine
-
-      - name: Verify CUDA
-        run: |
-          nvcc --version
-          where nvcc
 
       - name: Build wheel
         run: |
@@ -45,6 +62,7 @@ jobs:
           python -m twine check dist/*
 
       - name: List distributions
+        shell: powershell
         run: |
           Get-ChildItem dist
 
