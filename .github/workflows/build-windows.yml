@@ -1,4 +1,4 @@
-name: Build Windows Wheel
+name: Build Windows Wheels
 
 on:
   push:
@@ -12,6 +12,11 @@ jobs:
   build-windows:
     runs-on: windows-2025
 
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -19,7 +24,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python-version }}
 
       - name: Install CUDA Toolkit
         shell: powershell
@@ -46,16 +51,13 @@ jobs:
 
           echo "CUDA_PATH=$cudaPath" >> $env:GITHUB_ENV
           echo "CUDA_HOME=$cudaPath" >> $env:GITHUB_ENV
+          echo "CUDAToolkit_ROOT=$cudaPath" >> $env:GITHUB_ENV
           echo "CudaToolkitDir=$cudaPath\" >> $env:GITHUB_ENV
           echo "$cudaPath\bin" >> $env:GITHUB_PATH
 
       - name: Verify CUDA
         shell: powershell
         run: |
-          Write-Host "CUDA_PATH=$env:CUDA_PATH"
-          Write-Host "CUDA_HOME=$env:CUDA_HOME"
-          Write-Host "CudaToolkitDir=$env:CudaToolkitDir"
-
           nvcc --version
           where.exe nvcc
 
@@ -65,12 +67,6 @@ jobs:
           python -m pip install build scikit-build-core pybind11 wheel twine
 
       - name: Build wheel
-        shell: powershell
-        env:
-          CUDA_PATH: 'C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.3'
-          CUDA_HOME: 'C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.3'
-          CUDAToolkit_ROOT: 'C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.3'
-          CudaToolkitDir: 'C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.3\'
         run: |
           python -m build
 
@@ -86,5 +82,5 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: windows-wheels
+          name: windows-wheels-python-${{ matrix.python-version }}
           path: dist/*
