@@ -17,60 +17,58 @@ jobs:
       matrix:
         python-version: ["3.11", "3.12"]
 
-    container:
-      image: nvidia/cuda:13.3.1-devel-ubuntu24.04
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install system dependencies
-        run: |
-          apt-get update
-          apt-get install -y \
-            python3.11 \
-            python3.11-venv \
-            python3.11-dev \
-            python3.12 \
-            python3.12-venv \
-            python3.12-dev \
-            python3-pip \
-            build-essential \
-            git
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
 
-      - name: Setup Python environment
+      - name: Install CUDA Toolkit
         shell: bash
         run: |
-          python_bin="python${{ matrix.python-version }}"
+          wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb
 
-          "$python_bin" -m venv /tmp/venv
+          sudo dpkg -i cuda-keyring_1.1-1_all.deb
+          sudo apt-get update
 
-          /tmp/venv/bin/python -m pip install --upgrade pip
+          sudo apt-get install -y cuda-toolkit-13-3
 
-          /tmp/venv/bin/python -m pip install \
-            build \
-            scikit-build-core \
-            pybind11 \
-            wheel \
-            twine
+      - name: Setup CUDA environment
+        shell: bash
+        run: |
+          echo "CUDA_HOME=/usr/local/cuda-13.3" >> "$GITHUB_ENV"
+          echo "/usr/local/cuda-13.3/bin" >> "$GITHUB_PATH"
 
       - name: Verify Python
         run: |
-          /tmp/venv/bin/python --version
-          /tmp/venv/bin/python -c "import sys; print(sys.executable)"
+          python --version
+          python -c "import sys; print(sys.executable)"
 
       - name: Verify CUDA
         run: |
           nvcc --version
           which nvcc
 
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install \
+            build \
+            scikit-build-core \
+            pybind11 \
+            wheel \
+            twine
+
       - name: Build wheel
         run: |
-          /tmp/venv/bin/python -m build
+          python -m build
 
       - name: Check distributions
         run: |
-          /tmp/venv/bin/python -m twine check dist/*
+          python -m twine check dist/*
 
       - name: List distributions
         run: |
