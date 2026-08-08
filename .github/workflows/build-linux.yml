@@ -1,4 +1,4 @@
-name: Build Linux Wheel
+name: Build Linux Wheels
 
 on:
   push:
@@ -12,6 +12,11 @@ jobs:
   build-linux:
     runs-on: ubuntu-24.04
 
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+
     container:
       image: nvidia/cuda:13.3.1-devel-ubuntu24.04
 
@@ -23,6 +28,9 @@ jobs:
         run: |
           apt-get update
           apt-get install -y \
+            python3.11 \
+            python3.11-venv \
+            python3.11-dev \
             python3.12 \
             python3.12-venv \
             python3.12-dev \
@@ -31,9 +39,14 @@ jobs:
             git
 
       - name: Setup Python environment
+        shell: bash
         run: |
-          python3.12 -m venv /tmp/venv
+          python_bin="python${{ matrix.python-version }}"
+
+          "$python_bin" -m venv /tmp/venv
+
           /tmp/venv/bin/python -m pip install --upgrade pip
+
           /tmp/venv/bin/python -m pip install \
             build \
             scikit-build-core \
@@ -66,5 +79,5 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: linux-wheels
+          name: linux-wheels-python-${{ matrix.python-version }}
           path: dist/*
