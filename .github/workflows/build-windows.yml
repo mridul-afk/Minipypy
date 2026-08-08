@@ -39,12 +39,23 @@ jobs:
         run: |
           $cudaPath = "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.3"
 
+          if (!(Test-Path "$cudaPath\bin\nvcc.exe")) {
+            Write-Error "CUDA installation not found at $cudaPath"
+            exit 1
+          }
+
           echo "CUDA_PATH=$cudaPath" >> $env:GITHUB_ENV
+          echo "CUDA_HOME=$cudaPath" >> $env:GITHUB_ENV
+          echo "CudaToolkitDir=$cudaPath\" >> $env:GITHUB_ENV
           echo "$cudaPath\bin" >> $env:GITHUB_PATH
 
       - name: Verify CUDA
         shell: powershell
         run: |
+          Write-Host "CUDA_PATH=$env:CUDA_PATH"
+          Write-Host "CUDA_HOME=$env:CUDA_HOME"
+          Write-Host "CudaToolkitDir=$env:CudaToolkitDir"
+
           nvcc --version
           where.exe nvcc
 
@@ -54,6 +65,12 @@ jobs:
           python -m pip install build scikit-build-core pybind11 wheel twine
 
       - name: Build wheel
+        shell: powershell
+        env:
+          CUDA_PATH: 'C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.3'
+          CUDA_HOME: 'C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.3'
+          CUDAToolkit_ROOT: 'C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.3'
+          CudaToolkitDir: 'C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.3\'
         run: |
           python -m build
 
