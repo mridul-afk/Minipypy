@@ -1651,14 +1651,14 @@ Tensor Tensor::sqrt() const
       param = param - lr * m_hat / (sqrt(v_hat) + rps)
   */
 
-  Tensor out(this->shape, this->requires_grad || this->grad_fn != nullptr);
+  Tensor out(this->requires_grad || this->grad_fn != nullptr);
 
   launch_sqrt_forward(
       this->d_data,
       out.d_data,
       this->size);
 
-  if (this->shape, this->requires_grad || this->grad_fn != nullptr)
+  if (this->requires_grad || this->grad_fn != nullptr)
   {
     out.grad_fn = std::make_shared<AutogradNode>();
     out.grad_fn->op = OpType::SQRT;
