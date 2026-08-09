@@ -1,0 +1,81 @@
+name: Build Linux Wheels
+
+on:
+  push:
+    branches:
+      - probability
+  pull_request:
+    branches:
+      - probability
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-24.04
+
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install CUDA Toolkit
+        shell: bash
+        run: |
+          wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb
+
+          sudo dpkg -i cuda-keyring_1.1-1_all.deb
+          sudo apt-get update
+
+          sudo apt-get install -y cuda-toolkit-13-3
+
+      - name: Setup CUDA environment
+        shell: bash
+        run: |
+          echo "CUDA_HOME=/usr/local/cuda-13.3" >> "$GITHUB_ENV"
+          echo "/usr/local/cuda-13.3/bin" >> "$GITHUB_PATH"
+
+      - name: Verify Python
+        run: |
+          python --version
+          python -c "import sys; print(sys.executable)"
+
+      - name: Verify CUDA
+        run: |
+          nvcc --version
+          which nvcc
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install \
+            build \
+            scikit-build-core \
+            pybind11 \
+            wheel \
+            twine
+
+      - name: Build wheel
+        run: |
+          python -m build
+
+      - name: Check distributions
+        run: |
+          python -m twine check dist/*
+
+      - name: List distributions
+        run: |
+          ls -lh dist/
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-wheels-python-${{ matrix.python-version }}
+          path: dist/*
