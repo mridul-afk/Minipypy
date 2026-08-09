@@ -35,3 +35,6 @@ CMakeFiles/
 *.nsys-rep
 *.sqlite
 *.qdstrm
+
+# Runtime testing
+minipypy-runtime-test/
