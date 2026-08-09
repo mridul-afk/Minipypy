@@ -23,9 +23,13 @@ keywords = ["cuda", "c-plus-plus", "python", "tensor", "deep-learning", "pybind1
 classifiers = [
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
   "Programming Language :: C++",
   "Programming Language :: Python :: Implementation :: CPython",
   "Operating System :: Microsoft :: Windows",
+  "Operating System :: POSIX :: Linux",
   "Topic :: Scientific/Engineering :: Artificial Intelligence"
 ]
 
