@@ -1651,7 +1651,7 @@ Tensor Tensor::sqrt() const
       param = param - lr * m_hat / (sqrt(v_hat) + rps)
   */
 
-  Tensor out(this->requires_grad || this->grad_fn != nullptr);
+  Tensor out(this->shape, this->requires_grad || this->grad_fn != nullptr);
 
   launch_sqrt_forward(
       this->d_data,
