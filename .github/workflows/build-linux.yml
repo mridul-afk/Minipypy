@@ -1,9 +1,14 @@
 name: Build Linux Wheels
 
 on:
+  workflow_dispatch:
+
   push:
     branches:
       - probability
+    tags:
+      - "v*"
+
   pull_request:
     branches:
       - probability
@@ -40,6 +45,7 @@ jobs:
         shell: bash
         run: |
           echo "CUDA_HOME=/usr/local/cuda-13.3" >> "$GITHUB_ENV"
+          echo "CUDAToolkit_ROOT=/usr/local/cuda-13.3" >> "$GITHUB_ENV"
           echo "/usr/local/cuda-13.3/bin" >> "$GITHUB_PATH"
 
       - name: Verify Python

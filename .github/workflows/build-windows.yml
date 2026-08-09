@@ -1,9 +1,14 @@
 name: Build Windows Wheels
 
 on:
+  workflow_dispatch:
+
   push:
     branches:
       - probability
+    tags:
+      - "v*"
+
   pull_request:
     branches:
       - probability
