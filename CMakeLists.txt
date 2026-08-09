@@ -28,13 +28,14 @@ add_library(minitorch_cuda_engine STATIC
   src/autograd.cu
 )
 
-# Support common NVIDIA GPU architectures:
-# 75 = Turing
-# 80 = Ampere data center
-# 86 = Ampere consumer GPUs, e.g. RTX 30 series
-# 89 = Ada GPUs, e.g. RTX 40 series
+# Allow CUDA architectures to be overridden externally.
+# Default: current supported architectures.
+if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
+  set(CMAKE_CUDA_ARCHITECTURES "75;80;86;89")
+endif()
+
 set_target_properties(minitorch_cuda_engine PROPERTIES
-  CUDA_ARCHITECTURES "75;80;86;89"
+  CUDA_ARCHITECTURES "${CMAKE_CUDA_ARCHITECTURES}"
 )
 
 # 4. Create the Python C++ Extension Module
