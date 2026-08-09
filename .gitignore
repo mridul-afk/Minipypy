@@ -13,6 +13,7 @@ venv/
 wheeltest/
 pypi-test/
 build-test/
+minipypy-runtime-test/
 
 # CMake
 CMakeUserPresets.json
