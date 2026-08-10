@@ -1,5 +1,5 @@
-from ._C import *
+from ._C import Tensor
 from . import nn
 from . import optim
 
-__version__ = "0.9.1"
+__version__ = "0.9.3"
