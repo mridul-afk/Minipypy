@@ -45,7 +45,7 @@ MiniPyPy currently supports:
 ### Latest milestone
 
 ```text
-v0.9.0 — TensorFoldLinear Low-Rank Prototype
+v0.9.3 — TensorFoldLinear Low-Rank Prototype
 ```
 
 ### Test status
@@ -70,7 +70,7 @@ For a CPython 3.11 Windows environment:
 python -m venv venv
 .\venv\Scripts\activate
 
-pip install .\dist\minipypy-0.9.0-cp311-cp311-win_amd64.whl
+pip install .\dist\minipypy-0.9.3-cp311-cp311-win_amd64.whl
 ```
 
 Verify:
@@ -1412,7 +1412,7 @@ MiniPyPy is under active development.
 Current milestone:
 
 ```text
-v0.9.0 — TensorFoldLinear Low-Rank Prototype
+v0.9.3 — TensorFoldLinear Low-Rank Prototype
 ```
 
 Current stack:
