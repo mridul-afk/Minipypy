@@ -2,7 +2,7 @@
 
 MiniPyPy is a minimal PyTorch-like deep learning framework built from scratch using a custom C++/CUDA tensor engine, Python bindings through pybind11, reverse-mode autograd, and a growing high-level neural-network API.
 
-The goal is to build a small, understandable CUDA-backed deep-learning framework from scratch and then extend it with compressed and factorized neural-network layers through **TensorFold**.
+The goal is to build a small, understandable CUDA-backed deep-learning framework from scratch and extend it with compressed and factorized neural-network layers through **TensorFold**.
 
 **TensorFold is a subsystem inside MiniPyPy. It is not a separate framework.**
 
@@ -12,53 +12,153 @@ The goal is to build a small, understandable CUDA-backed deep-learning framework
 
 MiniPyPy currently supports:
 
-* CUDA-backed tensors
-* Python bindings through pybind11
-* Elementwise tensor operations
-* Broadcasting
-* Scalar tensor operations with autograd
-* Reverse-mode autograd
-* 2D matrix multiplication
-* N-D broadcasted batched matrix multiplication
-* ReLU forward/backward
-* N-D Softmax forward/backward
-* CUDA-backed `sqrt()`
-* Fused CrossEntropyLoss forward/backward
-* Fused BCEWithLogitsLoss forward/backward
-* Basic neural-network modules
-* Sequential models
-* SGD optimizer
-* Adam optimizer
-* MSELoss
-* HingeLoss
-* CrossEntropyLoss
-* BCEWithLogitsLoss
-* MNIST linear training examples
-* TensorFoldLinear low-rank layer
-* TensorFoldLinear single-layer MNIST benchmark
-* Dense MLP vs TensorFold MLP benchmark
-* Windows wheel builds
-* Linux wheel builds
-* Python 3.11–3.14 Windows wheels
-* Python 3.12/3.14 Linux wheels
+- CUDA-backed tensors
+- Python bindings through pybind11
+- Elementwise tensor operations
+- Broadcasting
+- Scalar tensor operations with autograd
+- Reverse-mode autograd
+- 2D matrix multiplication
+- N-D broadcasted batched matrix multiplication
+- ReLU forward/backward
+- N-D Softmax forward/backward
+- CUDA-backed `sqrt()`
+- Fused CrossEntropyLoss forward/backward
+- Fused BCEWithLogitsLoss forward/backward
+- Basic neural-network modules
+- Sequential models
+- SGD optimizer
+- Adam optimizer
+- MSELoss
+- HingeLoss
+- CrossEntropyLoss
+- BCEWithLogitsLoss
+- MNIST linear training examples
+- TensorFoldLinear low-rank layer
+- TensorFoldLinear single-layer MNIST benchmark
+- Dense MLP vs TensorFold MLP benchmark
+- Windows wheel builds
+- Linux wheel builds
+- Python 3.11–3.14 Windows wheels
+- Python 3.12/3.14 Linux wheels
+- GPU-resident tensor cloning
+- GPU-resident autograd saved tensors
+- Reduced CPU-mediated tensor transfers
 
 ### Latest milestone
 
 ```text
-v0.9.3 — TensorFoldLinear Low-Rank Prototype
+v0.9.4 — CUDA & Autograd Performance Optimization
 ```
 
 ### Test status
 
 ```text
-92 passed
+95 passed
 ```
+
+---
+
+# v0.9.4 CUDA / Autograd Optimization
+
+MiniPyPy v0.9.4 significantly reduces CPU-mediated tensor transfers in the CUDA/autograd execution path.
+
+The primary goal of this release was to keep intermediate tensor data on the GPU wherever possible instead of repeatedly moving it through host memory.
+
+## What's Improved
+
+- `Tensor::clone()` now uses direct CUDA device-to-device copies.
+- Autograd saved tensors remain GPU-resident where possible.
+- Saved intermediates used by `sum()`, `mean()`, and Softmax avoid unnecessary CPU round trips.
+- `Tensor::grad()` uses GPU-side cloning.
+- Scalar tensor creation avoids unnecessary host-to-device scalar copies.
+- ADD/SUB backward avoids redundant gradient clones when tensor shapes already match.
+- Broadcast-gradient handling continues to use `sum_to_shape()` where reduction is required.
+- Existing CUDA execution and Python APIs remain intact.
+
+## Training Benchmark
+
+Benchmark workload:
+
+```text
+Input:          [1024, 512]
+Weight:         [512, 256]
+Warmup steps:   10
+Measured steps: 100
+Learning rate:  0.001
+```
+
+Training workload:
+
+```text
+pred  = x @ W
+error = pred - y
+loss  = (error * error).mean()
+
+loss.backward()
+
+W = (W - W.grad() * LR).detach().requires_grad_(True)
+```
+
+### Results
+
+| Metric | Before optimization | v0.9.4 |
+| --- | ---: | ---: |
+| Average training step | 14.7628 ms | **1.3647 ms** |
+| Relative speed | 1.00x | **~10.82x** |
+| CUDA memcpy calls | 4,844 | **2,534** |
+| Host → Device | 2,022.185 MB | **3.675 MB** |
+| Device → Host | 2,019.033 MB | **0.524 MB** |
+| Device → Device | 0 MB | **1,787.822 MB** |
+
+The optimized execution path shifts intermediate autograd tensor movement away from CPU-mediated transfers toward GPU-local device-to-device copies.
+
+The final ADD/SUB backward optimization additionally reduced:
+
+```text
+D2D copies:
+1,980 → 1,760
+
+D2D transfer:
+2,018.509 MB → 1,787.822 MB
+```
+
+This removed approximately:
+
+```text
+220 D2D copies
+230.687 MB D2D traffic
+```
+
+from the profiled training workload.
+
+The remaining approximately 3.675 MB of Host → Device traffic is dominated by the initial benchmark tensor uploads.
+
+Performance measurements are specific to this benchmark workload and development environment and should not be interpreted as universal speedups across all models, GPUs, or workloads.
+
+## Validation
+
+The optimized backend passes the complete current MiniPyPy test suite:
+
+```text
+95 passed
+```
+
+Final benchmark:
+
+```text
+Steps:   100
+Total:   0.1365 s
+Average: 1.3647 ms/step
+```
+
+The CUDA workload was additionally profiled using NVIDIA Nsight Systems.
 
 ---
 
 # Installation
 
-MiniPyPy is currently distributed as platform-specific wheels through the project's CI builds.
+MiniPyPy is distributed as platform-specific wheels through the project's build and CI infrastructure.
 
 Because MiniPyPy contains native C++/CUDA code, wheels are platform and Python-version specific.
 
@@ -70,7 +170,7 @@ For a CPython 3.11 Windows environment:
 python -m venv venv
 .\venv\Scripts\activate
 
-pip install .\dist\minipypy-0.9.3-cp311-cp311-win_amd64.whl
+pip install .\dist\minipypy-0.9.4-cp311-cp311-win_amd64.whl
 ```
 
 Verify:
@@ -82,7 +182,7 @@ python -c "import minipypy as mini; print(mini.__version__)"
 Expected:
 
 ```text
-0.9.0
+0.9.4
 ```
 
 The Windows wheel has been runtime-tested successfully with CUDA-backed tensors and autograd.
@@ -122,7 +222,7 @@ Linux wheels can be installed directly:
 python -m venv minipypy-runtime-test
 source minipypy-runtime-test/bin/activate
 
-pip install /path/to/minipypy-0.9.0-cp312-cp312-linux_x86_64.whl
+pip install /path/to/minipypy-0.9.4-cp312-cp312-linux_x86_64.whl
 ```
 
 Verify:
@@ -170,14 +270,14 @@ python -c "import minipypy as mini; layer=mini.nn.TensorFoldLinear(4,3,rank=2); 
 
 Building MiniPyPy from source currently requires:
 
-* Python
-* CMake
-* Ninja
-* C++ compiler
-* NVIDIA CUDA Toolkit
-* CUDA-compatible NVIDIA GPU/toolchain
-* pybind11
-* scikit-build-core
+- Python
+- CMake
+- Ninja
+- C++ compiler
+- NVIDIA CUDA Toolkit
+- CUDA-compatible NVIDIA GPU/toolchain
+- pybind11
+- scikit-build-core
 
 ### Windows
 
@@ -552,6 +652,8 @@ W ≈ U @ V
 ```
 
 This reduces parameter count when the selected rank is sufficiently small.
+
+TensorFoldLinear uses MiniPyPy's existing CUDA-backed matrix multiplication operations, so both factor multiplications execute through the CUDA tensor backend.
 
 ---
 
@@ -931,7 +1033,7 @@ epochs      = 3
 train_limit = 2048
 test_limit  = 512
 optimizer   = SGD
-lr           = 0.1
+lr          = 0.1
 ```
 
 Results:
@@ -1026,13 +1128,13 @@ init        = Xavier
 
 Results:
 
-| Model              | Parameters | Compression | Test Accuracy |
-| ------------------ | ---------: | ----------: | ------------: |
-| Dense Linear       |      7,850 |       1.00x |       ~86.72% |
-| TensorFold rank=2  |      1,598 |       4.91x |        60.35% |
-| TensorFold rank=4  |      3,186 |       2.46x |        76.95% |
-| TensorFold rank=8  |      6,362 |       1.23x |        86.33% |
-| TensorFold rank=10 |      7,950 |       0.99x |        86.91% |
+| Model | Parameters | Compression | Test Accuracy |
+| --- | ---: | ---: | ---: |
+| Dense Linear | 7,850 | 1.00x | ~86.72% |
+| TensorFold rank=2 | 1,598 | 4.91x | 60.35% |
+| TensorFold rank=4 | 3,186 | 2.46x | 76.95% |
+| TensorFold rank=8 | 6,362 | 1.23x | 86.33% |
+| TensorFold rank=10 | 7,950 | 0.99x | 86.91% |
 
 The important result is that:
 
@@ -1043,6 +1145,8 @@ rank=8
 nearly matched the dense classifier while using fewer parameters.
 
 `rank=10` achieved slightly higher accuracy but is not a compression win because it contains more parameters than the dense model.
+
+These are small experimental runs and are intended as early TensorFold validation rather than definitive accuracy comparisons.
 
 ---
 
@@ -1074,13 +1178,13 @@ init        = Xavier
 
 Results:
 
-| Model                      | Parameters | Compression | Test Accuracy |
-| -------------------------- | ---------: | ----------: | ------------: |
-| Dense MLP                  |    101,770 |       1.00x |        85.55% |
-| TensorFold MLP r16/r8      |     15,834 |       6.43x |        83.40% |
-| TensorFold MLP r32/r8      |     30,426 |       3.34x |        83.79% |
-| TensorFold MLP r32/r10     |     30,702 |       3.31x |        86.13% |
-| TensorFold first layer r32 |     30,602 |       3.33x |        84.96% |
+| Model | Parameters | Compression | Test Accuracy |
+| --- | ---: | ---: | ---: |
+| Dense MLP | 101,770 | 1.00x | 85.55% |
+| TensorFold MLP r16/r8 | 15,834 | 6.43x | 83.40% |
+| TensorFold MLP r32/r8 | 30,426 | 3.34x | 83.79% |
+| TensorFold MLP r32/r10 | 30,702 | 3.31x | 86.13% |
+| TensorFold first layer r32 | 30,602 | 3.33x | 84.96% |
 
 On this small benchmark:
 
@@ -1101,6 +1205,8 @@ Compressing every layer is not always optimal.
 ```
 
 Large dense layers provide more opportunities for parameter reduction, while small final classifier layers may be better kept dense or assigned a larger rank.
+
+These results are preliminary and should be validated across repeated runs, larger datasets, and controlled seeds before drawing broader conclusions.
 
 ---
 
@@ -1130,7 +1236,7 @@ This is currently **training a factorized model from scratch**.
 
 It is not yet pretrained-model compression.
 
-The future workflow is:
+A future workflow is:
 
 ```text
 Pretrained dense model
@@ -1164,7 +1270,7 @@ Specifically:
 W ≈ U @ V
 ```
 
-TensorFold does **not yet** implement:
+TensorFold does **not yet** provide full N-D implementations of:
 
 ```text
 CP decomposition
@@ -1174,7 +1280,7 @@ TT-SVD
 HOSVD
 ```
 
-These are future research directions.
+These are part of the upcoming N-D TensorFold research and development direction.
 
 ---
 
@@ -1226,11 +1332,11 @@ Each wheel is platform-specific.
 Examples:
 
 ```text
-minipypy-0.9.0-cp311-cp311-win_amd64.whl
+minipypy-0.9.4-cp311-cp311-win_amd64.whl
 
-minipypy-0.9.0-cp312-cp312-linux_x86_64.whl
+minipypy-0.9.4-cp312-cp312-linux_x86_64.whl
 
-minipypy-0.9.0-cp314-cp314-linux_x86_64.whl
+minipypy-0.9.4-cp314-cp314-linux_x86_64.whl
 ```
 
 The project is moving toward distributing prebuilt native wheels so users do not need to compile MiniPyPy themselves.
@@ -1239,55 +1345,118 @@ The project is moving toward distributing prebuilt native wheels so users do not
 
 # Project Roadmap
 
-## v0.9.4 — TensorFoldLinear Low-Rank Prototype
+## v0.9.3 — Python API / Developer Experience
 
 Completed:
 
 ```text
-TensorFoldLinear layer
-Xavier initialization
-Parameter-count reporting
-Compression-ratio reporting
-Single-layer TensorFold MNIST benchmark
-Dense MLP vs TensorFold MLP benchmark
-Windows wheel CI
-Linux wheel CI
-Runtime wheel validation
+Improved _C.pyi type stubs
+Improved Tensor autocomplete
+Improved Pylance / VS Code integration
+Improved static type recognition
 ```
 
-## v0.10.0 — Tensorized / Tensor Decomposition Prototype
+## v0.9.4 — CUDA & Autograd Performance Optimization
 
-Planned:
+Completed:
 
 ```text
-Improve TensorFold benchmark reproducibility
-Add more TensorFoldLinear tests
-Add gradient checks for U, V, and bias
-Explore true tensorized layers
-Begin Tensor Train Linear design
+GPU-resident Tensor cloning
+GPU-resident autograd saved tensors
+Reduced CPU-mediated tensor transfers
+Optimized gradient retrieval
+Optimized scalar tensor creation
+Reduced ADD/SUB backward copies
+Nsight Systems profiling
+95-test validation
+~10.82x training-benchmark speedup vs pre-optimization baseline
 ```
 
-## v0.11.0
+## Next — TensorFold N-D Foundation
+
+Planned development order:
 
 ```text
-Dense-to-TensorFold conversion
+1. N-D tensor correctness
+        ↓
+2. Mode-n contraction
+        ↓
+3. General einsum
+        ↓
+4. Tucker decomposition
+        ↓
+5. CP decomposition
+        ↓
+6. Tensor Train decomposition
+        ↓
+7. TensorFold N-D layers
 ```
 
-## v0.12.0
+### Phase 1 — N-D Tensor Correctness
+
+Before building higher-order decomposition systems, MiniPyPy's existing N-D tensor behavior will be validated across:
 
 ```text
-SVD-based pretrained compression experiments
+N-D tensor creation
+Shape / size / stride correctness
+N-D reshape behavior
+Dimension permutation / transpose
+N-D elementwise operations
+Broadcasting
+Reductions
+Batched matrix multiplication
+Broadcasted batched matrix multiplication
+N-D autograd
 ```
 
-## Later
+### Phase 2 — Mode-n Contraction
+
+Introduce mode-n tensor contraction as the first core operation required for higher-order TensorFold decompositions.
+
+Where possible, contractions will initially be lowered to existing CUDA-backed tensor operations such as matrix multiplication rather than immediately introducing decomposition-specific CUDA kernels.
+
+### Phase 3 — General Einsum
+
+Develop an einsum-style contraction system capable of expressing general tensor contractions.
+
+The planned execution model is conceptually:
 
 ```text
-CP decomposition
-Tucker decomposition
-Tensor Train
-CUDA optimization
-Compressed inference
+Einsum equation
+       |
+       v
+Parse dimensions
+       |
+       v
+Determine free / contracted dimensions
+       |
+       v
+Plan contraction
+       |
+       v
+Lower to CUDA-backed primitives where possible
+       |
+       v
+Execute
 ```
+
+Specialized CUDA kernels can be introduced later where profiling demonstrates a meaningful benefit.
+
+### Phase 4 — Tucker
+
+Build Tucker decomposition support using the N-D contraction infrastructure.
+
+### Phase 5 — CP
+
+Add CP decomposition and factorized tensor representations.
+
+### Phase 6 — Tensor Train
+
+Introduce Tensor Train representations and associated contraction/decomposition infrastructure after the general N-D tensor engine is mature.
+
+### Phase 7 — TensorFold N-D Layers
+
+Use the decomposition infrastructure to build trainable TensorFold layers backed by higher-order tensor factorizations.
 
 ---
 
@@ -1295,26 +1464,27 @@ Compressed inference
 
 MiniPyPy aims to grow into a compact CUDA-backed deep-learning framework with:
 
-* More tensor operations
-* Better memory management
-* In-place optimizer updates
-* `no_grad()` context manager
-* More activation functions
-* More loss functions
-* Sigmoid
-* Tanh
-* Exp
-* Log
-* Convolution layers
-* TensorFold low-rank layers
-* TensorFold tensor-decomposition layers
-* Dense-to-TensorFold conversion
-* SVD-based pretrained-model compression
-* CUDA kernel optimization
-* Possible cuBLAS/cuDNN integration
-* Better CUDA error handling
-* Improved memory-pool management
-* Compressed inference
+- More tensor operations
+- Better memory management
+- In-place optimizer updates
+- `no_grad()` context manager
+- More activation functions
+- More loss functions
+- Sigmoid
+- Tanh
+- Exp
+- Log
+- Convolution layers
+- TensorFold low-rank layers
+- TensorFold N-D tensor-decomposition layers
+- Dense-to-TensorFold conversion
+- Pretrained-model compression experiments
+- CUDA kernel optimization
+- Better CUDA error handling
+- Improved memory-pool management
+- Compressed inference
+
+MiniPyPy currently avoids depending on large external GEMM libraries for its core TensorFold execution path, keeping the tensor engine compact and focused on custom CUDA/C++ implementations.
 
 ---
 
@@ -1328,13 +1498,17 @@ The current starting point is:
 W ≈ U @ V
 ```
 
-Future versions may tensorize a dense matrix:
+for a two-dimensional weight matrix.
+
+The next stage expands TensorFold toward N-dimensional tensors.
+
+A dense matrix:
 
 ```text
 W: [in_features, out_features]
 ```
 
-into a higher-order tensor:
+may eventually be tensorized into a higher-order representation such as:
 
 ```text
 W_tensor:
@@ -1348,36 +1522,55 @@ in_features  = i1 × i2 × ... × id
 out_features = o1 × o2 × ... × od
 ```
 
-Potential decomposition methods:
+The planned decomposition progression is:
 
 ```text
-CP decomposition
-Tucker decomposition
-Tensor Train decomposition
+Tucker
+   ↓
+CP
+   ↓
+Tensor Train
 ```
 
-Tensor Train is currently the most likely next major TensorFold decomposition target.
+supported by a common N-D contraction infrastructure built around mode-n contraction and general einsum-style operations.
+
+The goal is not simply to expose decomposition utilities, but to eventually use these representations directly in trainable TensorFold neural-network layers without requiring reconstruction of a full dense weight tensor during normal execution.
 
 ---
 
-# Future CUDA Optimization
+# CUDA Optimization Direction
 
-One possible CUDA optimization is moving small read-only broadcasting metadata into CUDA constant memory.
+v0.9.4 substantially improves GPU residency in the current tensor/autograd engine.
 
-Potential metadata:
+Further CUDA optimization will be driven by profiling rather than introducing specialized kernels prematurely.
+
+Potential future work includes:
 
 ```text
-output shape
-input shapes
-input strides
-ndim
+Fused backward operations
+Reduced temporary allocations
+Reduced intermediate tensor copies
+Improved memory-pool behavior
+Tensor contraction optimization
+Specialized TensorFold contraction kernels
 ```
 
-The motivation is that all threads repeatedly read the same metadata.
+For N-D TensorFold operations, the initial strategy is:
 
-Tensor data itself should remain in global memory.
+```text
+Tensor contraction
+        |
+        v
+Permutation / reshape where required
+        |
+        v
+Existing CUDA-backed matrix multiplication
+        |
+        v
+Reshape / restore dimensions
+```
 
-This optimization will be benchmarked independently and is not required for the current TensorFold milestone.
+Specialized or fused CUDA kernels can then be evaluated when profiling demonstrates that lowering to existing primitives is insufficient.
 
 ---
 
@@ -1387,21 +1580,23 @@ MiniPyPy is still experimental.
 
 Current limitations include:
 
-* No convolution layers yet
-* TensorFold currently implements low-rank matrix factorization only
-* No full CP/Tucker/Tensor Train implementation yet
-* No `no_grad()` context manager
-* No true integer tensor dtype yet
-* No sigmoid, tanh, exp, or log primitive APIs yet
-* CrossEntropyLoss currently supports `[batch, classes]` logits
-* Parameter updates currently replace tensors instead of mutating them in-place
-* Optimizer state is currently managed at the Python layer
-* Some internal cloning paths still use CPU roundtrips
-* CUDA error handling is not yet centralized
-* Memory pool does not yet support block splitting or stream-aware reuse
-* API and internals may change frequently
-* Pretrained dense-model compression is not implemented yet
-* CUDA/GPU/driver compatibility across all user environments has not yet been exhaustively tested
+- No convolution layers yet
+- TensorFold currently implements low-rank matrix factorization only
+- No full CP/Tucker/Tensor Train implementation yet
+- No general einsum API yet
+- N-D tensor correctness has not yet been comprehensively validated for the TensorFold decomposition roadmap
+- No `no_grad()` context manager
+- No true integer tensor dtype yet
+- No sigmoid, tanh, exp, or log primitive APIs yet
+- CrossEntropyLoss currently supports `[batch, classes]` logits
+- Parameter updates currently replace tensors instead of mutating them in-place
+- Optimizer state is currently managed at the Python layer
+- Some specialized operations may still require host/device transfers
+- CUDA error handling is not yet centralized
+- Memory pool does not yet support block splitting or stream-aware reuse
+- API and internals may change frequently
+- Pretrained dense-model compression is not yet fully integrated into TensorFold layers
+- CUDA/GPU/driver compatibility across all user environments has not yet been exhaustively tested
 
 ---
 
@@ -1412,7 +1607,7 @@ MiniPyPy is under active development.
 Current milestone:
 
 ```text
-v0.9.3 — TensorFoldLinear Low-Rank Prototype
+v0.9.4 — CUDA & Autograd Performance Optimization
 ```
 
 Current stack:
@@ -1420,7 +1615,7 @@ Current stack:
 ```text
 CUDA-backed Tensor
         +
-C++ CUDA Engine
+Custom C++ / CUDA Engine
         +
 pybind11
         +
@@ -1436,10 +1631,39 @@ TensorFoldLinear
 Current test status:
 
 ```text
-92 passed
+95 passed
 ```
 
-## The project is moving from a source-built experimental framework toward a **prebuilt-wheel experience**, with the long-term goal of making MiniPyPy usable by anyone with a compatible Python, NVIDIA GPU, and supported platform
+Current TensorFold development direction:
+
+```text
+2D TensorFoldLinear
+        |
+        v
+N-D Tensor Correctness
+        |
+        v
+Mode-n Contraction
+        |
+        v
+General Einsum
+        |
+        v
+Tucker
+        |
+        v
+CP
+        |
+        v
+Tensor Train
+        |
+        v
+TensorFold N-D Layers
+```
+
+**The project is moving from a source-built experimental framework toward a prebuilt-wheel experience, while simultaneously developing TensorFold into an N-D factorized neural-network subsystem.**
+
+---
 
 # License
 
