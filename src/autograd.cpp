@@ -47,12 +47,12 @@ Tensor Tensor::grad() const
 {
   if (!grad_tensor)
   {
-    std::vector<float> zeros(size, 0.0f);
-    return Tensor(zeros, shape);
+    Tensor out(shape);
+    launch_fill(out.d_data, 0.0f, out.size);
+    return out;
   }
 
-  std::vector<float> host_grad = grad_tensor->cpu();
-  return Tensor(host_grad, shape);
+  return grad_tensor->clone();
 }
 
 void Tensor::zero_grad()
@@ -92,7 +92,8 @@ void build_topo(
 void Tensor::backward()
 {
   if (!requires_grad)
-    throw std::runtime_error("cannot call backward on tensor that does not require grad");
+    throw std::runtime_error(
+        "cannot call backward on tensor that does not require grad");
 
   std::unordered_set<Tensor *> visited;
   std::vector<Tensor *> topo;
@@ -105,7 +106,10 @@ void Tensor::backward()
       tensor->zero_grad();
   }
 
-  launch_fill(grad_tensor->d_data, 1.0f, grad_tensor->size);
+  launch_fill(
+      grad_tensor->d_data,
+      1.0f,
+      grad_tensor->size);
 
   std::reverse(topo.begin(), topo.end());
 
@@ -113,6 +117,10 @@ void Tensor::backward()
   {
     if (!tensor || !tensor->grad_fn)
       continue;
+
+    // ------------------------------------------------------------
+    // SUM
+    // ------------------------------------------------------------
 
     if (tensor->grad_fn->op == OpType::SUM)
     {
@@ -127,6 +135,10 @@ void Tensor::backward()
       }
     }
 
+    // ------------------------------------------------------------
+    // MEAN
+    // ------------------------------------------------------------
+
     else if (tensor->grad_fn->op == OpType::MEAN)
     {
       Tensor *a = tensor->grad_fn->parents[0];
@@ -140,6 +152,10 @@ void Tensor::backward()
       }
     }
 
+    // ------------------------------------------------------------
+    // ADD
+    // ------------------------------------------------------------
+
     else if (tensor->grad_fn->op == OpType::ADD)
     {
       Tensor *a = tensor->grad_fn->parents[0];
@@ -147,34 +163,52 @@ void Tensor::backward()
 
       if (a && a->requires_grad)
       {
-        Tensor grad_a = tensor->grad_tensor->clone();
-
-        if (grad_a.shape != a->shape)
+        if (tensor->grad_tensor->shape == a->shape)
         {
-          grad_a = grad_a.sum_to_shape(a->shape);
+          // No clone required when no broadcasting occurred.
+          launch_add_backward(
+              tensor->grad_tensor->d_data,
+              a->grad_tensor->d_data,
+              a->size);
         }
+        else
+        {
+          Tensor grad_a =
+              tensor->grad_tensor->sum_to_shape(a->shape);
 
-        launch_add_backward(
-            grad_a.d_data,
-            a->grad_tensor->d_data,
-            a->size);
+          launch_add_backward(
+              grad_a.d_data,
+              a->grad_tensor->d_data,
+              a->size);
+        }
       }
 
       if (b && b->requires_grad)
       {
-        Tensor grad_b = tensor->grad_tensor->clone();
-
-        if (grad_b.shape != b->shape)
+        if (tensor->grad_tensor->shape == b->shape)
         {
-          grad_b = grad_b.sum_to_shape(b->shape);
+          // No clone required when no broadcasting occurred.
+          launch_add_backward(
+              tensor->grad_tensor->d_data,
+              b->grad_tensor->d_data,
+              b->size);
         }
+        else
+        {
+          Tensor grad_b =
+              tensor->grad_tensor->sum_to_shape(b->shape);
 
-        launch_add_backward(
-            grad_b.d_data,
-            b->grad_tensor->d_data,
-            b->size);
+          launch_add_backward(
+              grad_b.d_data,
+              b->grad_tensor->d_data,
+              b->size);
+        }
       }
     }
+
+    // ------------------------------------------------------------
+    // SUB
+    // ------------------------------------------------------------
 
     else if (tensor->grad_fn->op == OpType::SUB)
     {
@@ -183,34 +217,50 @@ void Tensor::backward()
 
       if (a && a->requires_grad)
       {
-        Tensor grad_a = tensor->grad_tensor->clone();
-
-        if (grad_a.shape != a->shape)
+        if (tensor->grad_tensor->shape == a->shape)
         {
-          grad_a = grad_a.sum_to_shape(a->shape);
+          launch_sub_backward_left(
+              tensor->grad_tensor->d_data,
+              a->grad_tensor->d_data,
+              a->size);
         }
+        else
+        {
+          Tensor grad_a =
+              tensor->grad_tensor->sum_to_shape(a->shape);
 
-        launch_sub_backward_left(
-            grad_a.d_data,
-            a->grad_tensor->d_data,
-            a->size);
+          launch_sub_backward_left(
+              grad_a.d_data,
+              a->grad_tensor->d_data,
+              a->size);
+        }
       }
 
       if (b && b->requires_grad)
       {
-        Tensor grad_b = tensor->grad_tensor->clone();
-
-        if (grad_b.shape != b->shape)
+        if (tensor->grad_tensor->shape == b->shape)
         {
-          grad_b = grad_b.sum_to_shape(b->shape);
+          launch_sub_backward_right(
+              tensor->grad_tensor->d_data,
+              b->grad_tensor->d_data,
+              b->size);
         }
+        else
+        {
+          Tensor grad_b =
+              tensor->grad_tensor->sum_to_shape(b->shape);
 
-        launch_sub_backward_right(
-            grad_b.d_data,
-            b->grad_tensor->d_data,
-            b->size);
+          launch_sub_backward_right(
+              grad_b.d_data,
+              b->grad_tensor->d_data,
+              b->size);
+        }
       }
     }
+
+    // ------------------------------------------------------------
+    // MUL
+    // ------------------------------------------------------------
 
     else if (tensor->grad_fn->op == OpType::MUL)
     {
@@ -219,7 +269,8 @@ void Tensor::backward()
 
       if (a && a->requires_grad)
       {
-        Tensor grad_a = tensor->grad_tensor->clone() * (*b);
+        Tensor grad_a =
+            tensor->grad_tensor->clone() * (*b);
 
         if (grad_a.shape != a->shape)
         {
@@ -234,7 +285,8 @@ void Tensor::backward()
 
       if (b && b->requires_grad)
       {
-        Tensor grad_b = tensor->grad_tensor->clone() * (*a);
+        Tensor grad_b =
+            tensor->grad_tensor->clone() * (*a);
 
         if (grad_b.shape != b->shape)
         {
@@ -247,6 +299,10 @@ void Tensor::backward()
             b->size);
       }
     }
+
+    // ------------------------------------------------------------
+    // DIV
+    // ------------------------------------------------------------
 
     else if (tensor->grad_fn->op == OpType::DIV)
     {
@@ -255,7 +311,8 @@ void Tensor::backward()
 
       if (a && a->requires_grad)
       {
-        Tensor grad_a = tensor->grad_tensor->clone() / (*b);
+        Tensor grad_a =
+            tensor->grad_tensor->clone() / (*b);
 
         if (grad_a.shape != a->shape)
         {
@@ -270,14 +327,16 @@ void Tensor::backward()
 
       if (b && b->requires_grad)
       {
-        Tensor grad_b = (tensor->grad_tensor->clone() * (*a)) / ((*b) * (*b));
+        Tensor grad_b =
+            (tensor->grad_tensor->clone() * (*a)) /
+            ((*b) * (*b));
 
         if (grad_b.shape != b->shape)
         {
           grad_b = grad_b.sum_to_shape(b->shape);
         }
 
-        // Because d(a / b) / db = -a / b^2
+        // d(a / b) / db = -a / b^2
         launch_sub_backward_right(
             grad_b.d_data,
             b->grad_tensor->d_data,
@@ -285,23 +344,34 @@ void Tensor::backward()
       }
     }
 
+    // ------------------------------------------------------------
+    // MATMUL
+    // ------------------------------------------------------------
+
     else if (tensor->grad_fn->op == OpType::MATMUL)
     {
       Tensor *a = tensor->grad_fn->parents[0];
       Tensor *b = tensor->grad_fn->parents[1];
 
-      if (a->shape.size() < 2 || b->shape.size() < 2)
-        throw std::runtime_error("matmul backward requires tensors with at least 2 dimensions");
+      if (a->shape.size() < 2 ||
+          b->shape.size() < 2)
+      {
+        throw std::runtime_error(
+            "matmul backward requires tensors with at least 2 dimensions");
+      }
 
       if (a && a->requires_grad)
       {
-        Tensor b_T = b->transpose_last_two_dims();
+        Tensor b_T =
+            b->transpose_last_two_dims();
 
-        Tensor grad_a = tensor->grad_tensor->matmul(b_T);
+        Tensor grad_a =
+            tensor->grad_tensor->matmul(b_T);
 
         if (grad_a.shape != a->shape)
         {
-          grad_a = grad_a.sum_to_shape(a->shape);
+          grad_a =
+              grad_a.sum_to_shape(a->shape);
         }
 
         launch_add_backward(
@@ -312,13 +382,16 @@ void Tensor::backward()
 
       if (b && b->requires_grad)
       {
-        Tensor a_T = a->transpose_last_two_dims();
+        Tensor a_T =
+            a->transpose_last_two_dims();
 
-        Tensor grad_b = a_T.matmul(*tensor->grad_tensor);
+        Tensor grad_b =
+            a_T.matmul(*tensor->grad_tensor);
 
         if (grad_b.shape != b->shape)
         {
-          grad_b = grad_b.sum_to_shape(b->shape);
+          grad_b =
+              grad_b.sum_to_shape(b->shape);
         }
 
         launch_add_backward(
@@ -327,9 +400,15 @@ void Tensor::backward()
             b->size);
       }
     }
+
+    // ------------------------------------------------------------
+    // RELU
+    // ------------------------------------------------------------
+
     else if (tensor->grad_fn->op == OpType::RELU)
     {
-      Tensor *a = tensor->grad_fn->parents[0];
+      Tensor *a =
+          tensor->grad_fn->parents[0];
 
       if (a && a->requires_grad)
       {
@@ -340,56 +419,71 @@ void Tensor::backward()
             a->size);
       }
     }
+
+    // ------------------------------------------------------------
+    // SOFTMAX
+    // ------------------------------------------------------------
+
     else if (tensor->grad_fn->op == OpType::SOFTMAX)
     {
-      Tensor *a = tensor->grad_fn->parents[0];
+      Tensor *a =
+          tensor->grad_fn->parents[0];
 
       if (a && a->requires_grad)
       {
-        int ndim_count = static_cast<int>(a->shape.size());
+        int ndim_count =
+            static_cast<int>(a->shape.size());
 
         if (ndim_count == 0)
         {
-          throw std::runtime_error("softmax backward requires at least 1D tensor");
+          throw std::runtime_error(
+              "softmax backward requires at least 1D tensor");
         }
 
-        int dim = tensor->grad_fn->dim;
+        int dim =
+            tensor->grad_fn->dim;
 
-        if (dim < 0 || dim >= ndim_count)
+        if (dim < 0 ||
+            dim >= ndim_count)
         {
-          throw std::runtime_error("softmax backward dim out of range");
+          throw std::runtime_error(
+              "softmax backward dim out of range");
         }
 
         int outer_size = 1;
+
         for (int i = 0; i < dim; i++)
         {
           outer_size *= a->shape[i];
         }
 
-        int softmax_size = a->shape[dim];
+        int softmax_size =
+            a->shape[dim];
 
         int inner_size = 1;
-        for (int i = dim + 1; i < ndim_count; i++)
+
+        for (int i = dim + 1;
+             i < ndim_count;
+             i++)
         {
           inner_size *= a->shape[i];
         }
 
         if (tensor->grad_fn->saved_tensors.empty())
         {
-          throw std::runtime_error("softmax backward missing saved softmax output");
+          throw std::runtime_error(
+              "softmax backward missing saved softmax output");
         }
 
         /*
-          Use saved_tensors.back().
+          add_parent_to_node() may also store
+          intermediate parents in saved_tensors.
 
-          Why?
-            add_parent_to_node() may also store intermediate parent tensors
-            inside saved_tensors.
-
-          The softmax output is pushed after add_parent_to_node(),
-          so it is always the last saved tensor.
+          The softmax output is pushed afterward,
+          so it is always the final saved tensor.
         */
-        Tensor *softmax_output = tensor->grad_fn->saved_tensors.back().get();
+        Tensor *softmax_output =
+            tensor->grad_fn->saved_tensors.back().get();
 
         launch_softmax_backward(
             softmax_output->d_data,
@@ -400,30 +494,45 @@ void Tensor::backward()
             inner_size);
       }
     }
-    else if (tensor->grad_fn->op == OpType::CROSS_ENTROPY)
-    {
-      Tensor *logits = tensor->grad_fn->parents[0];
 
-      if (logits && logits->requires_grad)
+    // ------------------------------------------------------------
+    // CROSS ENTROPY
+    // ------------------------------------------------------------
+
+    else if (
+        tensor->grad_fn->op ==
+        OpType::CROSS_ENTROPY)
+    {
+      Tensor *logits =
+          tensor->grad_fn->parents[0];
+
+      if (logits &&
+          logits->requires_grad)
       {
         if (logits->shape.size() != 2)
         {
-          throw std::runtime_error("cross_entropy backward expects logits with shape [batch, classes]");
+          throw std::runtime_error(
+              "cross_entropy backward expects logits with shape [batch, classes]");
         }
 
-        int batch_size = logits->shape[0];
-        int num_classes = logits->shape[1];
+        int batch_size =
+            logits->shape[0];
+
+        int num_classes =
+            logits->shape[1];
 
         if (tensor->grad_fn->saved_tensors.empty())
         {
-          throw std::runtime_error("cross_entropy backward missing saved target");
+          throw std::runtime_error(
+              "cross_entropy backward missing saved target");
         }
 
         /*
-          The saved target is pushed after add_parent_to_node().
-          Use back() because add_parent_to_node() may save intermediate parents.
+          Target is pushed after add_parent_to_node(),
+          so use the final saved tensor.
         */
-        Tensor *target = tensor->grad_fn->saved_tensors.back().get();
+        Tensor *target =
+            tensor->grad_fn->saved_tensors.back().get();
 
         launch_cross_entropy_backward(
             logits->d_data,
@@ -434,18 +543,29 @@ void Tensor::backward()
             num_classes);
       }
     }
-    else if (tensor->grad_fn->op == OpType::BCE_WITH_LOGITS)
-    {
-      Tensor *logits = tensor->grad_fn->parents[0];
 
-      if (logits && logits->requires_grad)
+    // ------------------------------------------------------------
+    // BCE WITH LOGITS
+    // ------------------------------------------------------------
+
+    else if (
+        tensor->grad_fn->op ==
+        OpType::BCE_WITH_LOGITS)
+    {
+      Tensor *logits =
+          tensor->grad_fn->parents[0];
+
+      if (logits &&
+          logits->requires_grad)
       {
         if (tensor->grad_fn->saved_tensors.empty())
         {
-          throw std::runtime_error("bce_with_logits backward missing saved target");
+          throw std::runtime_error(
+              "bce_with_logits backward missing saved target");
         }
 
-        Tensor *target = tensor->grad_fn->saved_tensors.back().get();
+        Tensor *target =
+            tensor->grad_fn->saved_tensors.back().get();
 
         launch_bce_with_logits_backward(
             logits->d_data,
@@ -455,11 +575,21 @@ void Tensor::backward()
             logits->size);
       }
     }
-    else if (tensor->grad_fn->op == OpType::SQRT)
-    {
-      Tensor *a = tensor->grad_fn->parents[0];
 
-      if (a && (a->requires_grad || a->grad_fn != nullptr))
+    // ------------------------------------------------------------
+    // SQRT
+    // ------------------------------------------------------------
+
+    else if (
+        tensor->grad_fn->op ==
+        OpType::SQRT)
+    {
+      Tensor *a =
+          tensor->grad_fn->parents[0];
+
+      if (a &&
+          (a->requires_grad ||
+           a->grad_fn != nullptr))
       {
         launch_sqrt_backward(
             a->d_data,

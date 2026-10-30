@@ -57,7 +57,7 @@ static void add_parent_to_node(
 
   if (t.grad_fn || !t.requires_grad)
   {
-    Tensor saved(t.cpu(), t.shape, t.requires_grad);
+    Tensor saved = t.clone();
     saved.grad_fn = t.grad_fn;
 
     node->saved_tensors.push_back(
@@ -788,7 +788,9 @@ Tensor Tensor::operator/(const Tensor &other) const
 */
 static Tensor scalar_tensor(float scalar)
 {
-  return Tensor(std::vector<float>{scalar}, std::vector<int>{1}, false);
+  Tensor out(std::vector<int>{1}, false);
+  launch_fill(out.d_data, scalar, 1);
+  return out;
 }
 
 Tensor Tensor::operator+(float scalar) const
@@ -1063,7 +1065,7 @@ Tensor Tensor::sum() const
     // so expressions like (x*x).sum() do not point to a destroyed temporary.
     if (this->grad_fn)
     {
-      Tensor saved(this->cpu(), this->shape, this->requires_grad);
+      Tensor saved(this->clone());
       saved.grad_fn = this->grad_fn;
 
       out.grad_fn->saved_tensors.push_back(
@@ -1098,7 +1100,7 @@ Tensor Tensor::mean() const
 
     if (this->grad_fn)
     {
-      Tensor saved(this->cpu(), shape, requires_grad);
+      Tensor saved(this->clone());
       saved.grad_fn = this->grad_fn;
 
       out.grad_fn->saved_tensors.push_back(
@@ -1201,9 +1203,21 @@ Tensor Tensor::sum_to_shape(std::vector<int> target_shape) const
 
 Tensor Tensor::clone() const
 {
-  std::vector<float> host = cpu();
+  Tensor out(shape, requires_grad);
 
-  Tensor out(host, shape, requires_grad);
+  if (size > 0)
+  {
+    cudaError_t err = cudaMemcpy(
+        out.d_data,
+        d_data,
+        static_cast<size_t>(size) * sizeof(float),
+        cudaMemcpyDeviceToDevice);
+
+    if (err != cudaSuccess)
+    {
+      throw std::runtime_error(cudaGetErrorString(err));
+    }
+  }
 
   return out;
 }
@@ -1436,15 +1450,15 @@ Tensor Tensor::softmax(int dim) const
     /*
       Softmax backward needs the softmax output values.
 
-      We save output as a tensor in saved_tensors.
+      Save an owned GPU copy because `out` is returned to the caller
+      and the backward node needs the values later.
 
-      This uses CPU roundtrip for now:
-        GPU -> CPU -> GPU
-
-      It is simple and correct. Later we can replace this with
-      a GPU-to-GPU clone.
+      clone() performs a device-to-device copy, avoiding the previous
+      GPU -> CPU -> GPU roundtrip.
     */
-    Tensor saved_out(out.cpu(), out.shape, false);
+    Tensor saved_out = out.clone();
+    saved_out.requires_grad = false;
+    saved_out.grad_fn = nullptr;
 
     out.grad_fn->saved_tensors.push_back(
         std::make_shared<Tensor>(std::move(saved_out)));
