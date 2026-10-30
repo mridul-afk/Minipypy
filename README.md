@@ -1189,7 +1189,7 @@ python -m pytest -v
 Current development snapshot:
 
 ```text
-92 passed
+95 passed
 ```
 
 The project also uses CI to build native wheels for Windows and Linux.
@@ -1239,7 +1239,7 @@ The project is moving toward distributing prebuilt native wheels so users do not
 
 # Project Roadmap
 
-## v0.9.0 — TensorFoldLinear Low-Rank Prototype
+## v0.9.4 — TensorFoldLinear Low-Rank Prototype
 
 Completed:
 
