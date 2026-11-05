@@ -176,6 +176,15 @@ void launch_transpose_last_two_dims(
     int ndim,
     int total_size);
 
+void launch_permute(
+    const float *input,
+    float *output,
+    const int *in_stride,
+    const int *out_shape,
+    const int *dims,
+    int ndim,
+    int total_size);
+
 void launch_sum_to_shape(
     const float *input,
     float *output,
@@ -1019,13 +1028,25 @@ Tensor Tensor::reshape(std::vector<int> new_shape) const
   if (new_size != size)
     throw std::runtime_error("reshape size mismatch");
 
-  Tensor out(new_shape, requires_grad);
+  bool needs_grad =
+      this->requires_grad ||
+      this->grad_fn != nullptr;
+
+  Tensor out(new_shape, needs_grad);
 
   cudaMemcpy(
       out.d_data,
       d_data,
       size * sizeof(float),
       cudaMemcpyDeviceToDevice);
+
+  if (needs_grad)
+  {
+    out.grad_fn = std::make_shared<AutogradNode>();
+    out.grad_fn->op = OpType::RESHAPE;
+
+    add_parent_to_node(out.grad_fn, *this);
+  }
 
   return out;
 }
@@ -1157,6 +1178,114 @@ Tensor Tensor::transpose_last_two_dims() const
 
   free_device_int_vector(d_in_shape, shape);
   free_device_int_vector(d_out_shape, out_shape);
+
+  return out;
+}
+
+Tensor Tensor::permute(std::vector<int> dims) const
+{
+  int ndim_count = static_cast<int>(shape.size());
+
+  // ---------------------------------------------------------
+  // 1. Validate permutation dimensions
+  // ---------------------------------------------------------
+
+  if (static_cast<int>(dims.size()) != ndim_count)
+  {
+    throw std::runtime_error(
+        "permute dims must match tensor dimensions");
+  }
+
+  std::vector<bool> seen(ndim_count, false);
+
+  for (int dim : dims)
+  {
+    if (dim < 0 || dim >= ndim_count)
+    {
+      throw std::runtime_error(
+          "permute dimension out of range");
+    }
+
+    if (seen[dim])
+    {
+      throw std::runtime_error(
+          "permute dimensions must be unique");
+    }
+
+    seen[dim] = true;
+  }
+
+  // ---------------------------------------------------------
+  // 2. Construct output shape
+  // ---------------------------------------------------------
+
+  std::vector<int> out_shape(ndim_count);
+
+  for (int i = 0; i < ndim_count; i++)
+  {
+    out_shape[i] = shape[dims[i]];
+  }
+
+  // Preserve gradient tracking for both leaf tensors
+  // and intermediate tensors in the computation graph.
+  bool needs_grad =
+      this->requires_grad ||
+      this->grad_fn != nullptr;
+
+  Tensor out(out_shape, needs_grad);
+
+  // ---------------------------------------------------------
+  // 3. Prepare CUDA metadata
+  // ---------------------------------------------------------
+
+  int *d_in_stride =
+      copy_int_vector_to_device(stride);
+
+  int *d_out_shape =
+      copy_int_vector_to_device(out_shape);
+
+  int *d_dims =
+      copy_int_vector_to_device(dims);
+
+  // ---------------------------------------------------------
+  // 4. Execute forward permutation on GPU
+  // ---------------------------------------------------------
+
+  launch_permute(
+      d_data,
+      out.d_data,
+      d_in_stride,
+      d_out_shape,
+      d_dims,
+      ndim_count,
+      size);
+
+  // ---------------------------------------------------------
+  // 5. Release temporary CUDA metadata
+  // ---------------------------------------------------------
+
+  free_device_int_vector(d_in_stride, stride);
+  free_device_int_vector(d_out_shape, out_shape);
+  free_device_int_vector(d_dims, dims);
+
+  // ---------------------------------------------------------
+  // 6. Register PERMUTE in autograd graph
+  // ---------------------------------------------------------
+
+  if (needs_grad)
+  {
+    out.grad_fn = std::make_shared<AutogradNode>();
+
+    out.grad_fn->op = OpType::PERMUTE;
+
+    // Save forward permutation for inverse mapping
+    // during backward.
+    out.grad_fn->permutation = dims;
+
+    // Connect output to original input tensor.
+    // Handles both leaf tensors and intermediates.
+    add_parent_to_node(out.grad_fn, *this);
+  }
 
   return out;
 }

@@ -1,5 +1,6 @@
 #include "tensor.h"
 #include "autograd.h"
+#include <cuda_runtime.h>
 
 #include <stdexcept>
 #include <vector>
@@ -42,6 +43,15 @@ void launch_sqrt_backward(
     const float *grad_out,
     float *grad_in,
     int size);
+
+void launch_permute_backward(
+    const float *grad_output,
+    float *grad_input,
+    const int *input_stride,
+    const int *output_shape,
+    const int *dims,
+    int ndim,
+    int total_size);
 
 Tensor Tensor::grad() const
 {
@@ -596,6 +606,105 @@ void Tensor::backward()
             tensor->grad_tensor->d_data,
             a->grad_tensor->d_data,
             a->size);
+      }
+    }
+    // ------------------------------------------------------------
+    // RESHAPE
+    // ------------------------------------------------------------
+
+    else if (tensor->grad_fn->op == OpType::RESHAPE)
+    {
+      Tensor *a = tensor->grad_fn->parents[0];
+
+      if (a &&
+          (a->requires_grad ||
+           a->grad_fn != nullptr))
+      {
+        /*
+          Reshape preserves element order.
+
+          Forward:
+              a [original shape]
+                  ->
+              tensor [reshaped]
+
+          Backward:
+              gradient values map element-for-element
+              back to the original tensor.
+
+          No temporary reshape or D2D copy is required.
+          Accumulate directly into the parent's gradient buffer.
+        */
+        launch_add_backward(
+            tensor->grad_tensor->d_data,
+            a->grad_tensor->d_data,
+            a->size);
+      }
+    }
+
+    else if (tensor->grad_fn->op == OpType::PERMUTE)
+    {
+      Tensor *a = tensor->grad_fn->parents[0];
+
+      if (a && (a->requires_grad || a->grad_fn != nullptr))
+      {
+        const std::vector<int> &dims =
+            tensor->grad_fn->permutation;
+
+        int ndim = static_cast<int>(dims.size());
+
+        int *d_input_stride = nullptr;
+        int *d_output_shape = nullptr;
+        int *d_dims = nullptr;
+
+        size_t bytes = ndim * sizeof(int);
+
+        cudaMalloc(
+            reinterpret_cast<void **>(&d_input_stride),
+            bytes);
+
+        cudaMalloc(
+            reinterpret_cast<void **>(&d_output_shape),
+            bytes);
+
+        cudaMalloc(
+            reinterpret_cast<void **>(&d_dims),
+            bytes);
+
+        cudaMemcpy(
+            d_input_stride,
+            a->stride.data(),
+            bytes,
+            cudaMemcpyHostToDevice);
+
+        cudaMemcpy(
+            d_output_shape,
+            tensor->shape.data(),
+            bytes,
+            cudaMemcpyHostToDevice);
+
+        cudaMemcpy(
+            d_dims,
+            dims.data(),
+            bytes,
+            cudaMemcpyHostToDevice);
+
+        launch_permute_backward(
+            tensor->grad_tensor->d_data,
+            a->grad_tensor->d_data,
+            d_input_stride,
+            d_output_shape,
+            d_dims,
+            ndim,
+            tensor->size);
+
+        // The launcher uses the default CUDA stream.
+        // Synchronize before freeing its metadata.
+        cudaDeviceSynchronize();
+
+        cudaFree(d_input_stride);
+        cudaFree(d_output_shape);
+        cudaFree(d_dims);
       }
     }
   }

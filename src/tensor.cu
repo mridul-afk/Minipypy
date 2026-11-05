@@ -558,6 +558,57 @@ __global__ void sum_to_shape_kernel(
   atomicAdd(&output[out_idx], input[idx]);
 }
 
+__global__ void permute_kernel(
+    const float *input,
+    float *output,
+    const int *in_stride,
+    const int *out_shape,
+    const int *dims,
+    int ndim,
+    int total_size)
+{
+  int out_idx =
+      blockIdx.x * blockDim.x + threadIdx.x;
+
+  if (out_idx >= total_size)
+    return;
+
+  int remaining = out_idx;
+  int input_idx = 0;
+
+  /*
+    Decode the output linear index into output coordinates.
+
+    Example output shape:
+        [3, 2, 4]
+
+    If coordinates are:
+        [1, 0, 2]
+
+    and dims:
+        [1, 0, 2]
+
+    then:
+
+        output axis 0 corresponds to input axis 1
+        output axis 1 corresponds to input axis 0
+        output axis 2 corresponds to input axis 2
+  */
+
+  for (int axis = ndim - 1; axis >= 0; --axis)
+  {
+    int coord = remaining % out_shape[axis];
+    remaining /= out_shape[axis];
+
+    int input_axis = dims[axis];
+
+    input_idx +=
+        coord * in_stride[input_axis];
+  }
+
+  output[out_idx] = input[input_idx];
+}
+
 void launch_add(const float *a, const float *b, float *out, int size)
 {
   add_kernel<<<(size + 255) / 256, 256>>>(a, b, out, size);
@@ -1362,4 +1413,28 @@ void launch_sqrt_forward(
       input,
       output,
       size);
+}
+
+void launch_permute(
+    const float *input,
+    float *output,
+    const int *in_stride,
+    const int *out_shape,
+    const int *dims,
+    int ndim,
+    int total_size)
+{
+  int threads = 256;
+
+  int blocks =
+      (total_size + threads - 1) / threads;
+
+  permute_kernel<<<blocks, threads>>>(
+      input,
+      output,
+      in_stride,
+      out_shape,
+      dims,
+      ndim,
+      total_size);
 }

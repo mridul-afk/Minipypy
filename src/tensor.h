@@ -61,6 +61,7 @@ public:
    Tensor flatten() const;
    Tensor transpose() const;
    Tensor transpose_last_two_dims() const;
+   Tensor permute(std::vector<int> dims) const;
    Tensor sum_to_shape(std::vector<int> target_shape) const;
    Tensor sum() const;
    Tensor mean() const;

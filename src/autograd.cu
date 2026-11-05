@@ -581,3 +581,64 @@ void launch_sqrt_backward(
         grad_in,
         size);
 }
+
+__global__ void permute_backward_kernel(
+    const float *grad_output,
+    float *grad_input,
+    const int *input_stride,
+    const int *output_shape,
+    const int *dims,
+    int ndim,
+    int total_size)
+{
+    int out_idx =
+        blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (out_idx >= total_size)
+        return;
+
+    int remaining = out_idx;
+    int input_idx = 0;
+
+    for (int axis = ndim - 1; axis >= 0; --axis)
+    {
+        int coord = remaining % output_shape[axis];
+
+        remaining /= output_shape[axis];
+
+        int input_axis = dims[axis];
+
+        input_idx +=
+            coord * input_stride[input_axis];
+    }
+
+    // Accumulate rather than overwrite.
+    grad_input[input_idx] += grad_output[out_idx];
+}
+
+void launch_permute_backward(
+    const float *grad_output,
+    float *grad_input,
+    const int *input_stride,
+    const int *output_shape,
+    const int *dims,
+    int ndim,
+    int total_size)
+{
+    if (total_size == 0)
+        return;
+
+    constexpr int threads = 256;
+
+    int blocks =
+        (total_size + threads - 1) / threads;
+
+    permute_backward_kernel<<<blocks, threads>>>(
+        grad_output,
+        grad_input,
+        input_stride,
+        output_shape,
+        dims,
+        ndim,
+        total_size);
+}
