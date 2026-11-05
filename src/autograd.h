@@ -20,7 +20,9 @@ enum class OpType
     SOFTMAX,
     CROSS_ENTROPY,
     BCE_WITH_LOGITS,
-    SQRT
+    SQRT,
+    RESHAPE,
+    PERMUTE
 };
 
 struct AutogradNode
@@ -43,6 +45,7 @@ struct AutogradNode
 
       Backward must know which dimension softmax was applied over.
     */
+    std::vector<int> permutation;
     int dim = -1;
 };
 
