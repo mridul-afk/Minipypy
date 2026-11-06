@@ -53,6 +53,13 @@ void launch_permute_backward(
     int ndim,
     int total_size);
 
+int *copy_int_vector_to_device(
+    const std::vector<int> &host);
+
+void free_device_int_vector(
+    int *ptr,
+    const std::vector<int> &host);
+
 Tensor Tensor::grad() const
 {
   if (!grad_tensor)
@@ -128,9 +135,7 @@ void Tensor::backward()
     if (!tensor || !tensor->grad_fn)
       continue;
 
-    // ------------------------------------------------------------
-    // SUM
-    // ------------------------------------------------------------
+    // Sum backward
 
     if (tensor->grad_fn->op == OpType::SUM)
     {
@@ -145,9 +150,7 @@ void Tensor::backward()
       }
     }
 
-    // ------------------------------------------------------------
-    // MEAN
-    // ------------------------------------------------------------
+    // Mean backward
 
     else if (tensor->grad_fn->op == OpType::MEAN)
     {
@@ -162,9 +165,7 @@ void Tensor::backward()
       }
     }
 
-    // ------------------------------------------------------------
-    // ADD
-    // ------------------------------------------------------------
+    // Add backward
 
     else if (tensor->grad_fn->op == OpType::ADD)
     {
@@ -216,9 +217,7 @@ void Tensor::backward()
       }
     }
 
-    // ------------------------------------------------------------
-    // SUB
-    // ------------------------------------------------------------
+    // Sub backward
 
     else if (tensor->grad_fn->op == OpType::SUB)
     {
@@ -268,9 +267,7 @@ void Tensor::backward()
       }
     }
 
-    // ------------------------------------------------------------
-    // MUL
-    // ------------------------------------------------------------
+    // Mul backward
 
     else if (tensor->grad_fn->op == OpType::MUL)
     {
@@ -310,9 +307,7 @@ void Tensor::backward()
       }
     }
 
-    // ------------------------------------------------------------
-    // DIV
-    // ------------------------------------------------------------
+    // Div backward
 
     else if (tensor->grad_fn->op == OpType::DIV)
     {
@@ -354,9 +349,7 @@ void Tensor::backward()
       }
     }
 
-    // ------------------------------------------------------------
-    // MATMUL
-    // ------------------------------------------------------------
+    // Matmul backward
 
     else if (tensor->grad_fn->op == OpType::MATMUL)
     {
@@ -411,9 +404,7 @@ void Tensor::backward()
       }
     }
 
-    // ------------------------------------------------------------
-    // RELU
-    // ------------------------------------------------------------
+    // Relu backward
 
     else if (tensor->grad_fn->op == OpType::RELU)
     {
@@ -430,9 +421,7 @@ void Tensor::backward()
       }
     }
 
-    // ------------------------------------------------------------
-    // SOFTMAX
-    // ------------------------------------------------------------
+    // Softmax backward
 
     else if (tensor->grad_fn->op == OpType::SOFTMAX)
     {
@@ -505,9 +494,7 @@ void Tensor::backward()
       }
     }
 
-    // ------------------------------------------------------------
-    // CROSS ENTROPY
-    // ------------------------------------------------------------
+    // Cross entropy backward
 
     else if (
         tensor->grad_fn->op ==
@@ -554,9 +541,7 @@ void Tensor::backward()
       }
     }
 
-    // ------------------------------------------------------------
-    // BCE WITH LOGITS
-    // ------------------------------------------------------------
+    // Bce with logits backward
 
     else if (
         tensor->grad_fn->op ==
@@ -586,9 +571,7 @@ void Tensor::backward()
       }
     }
 
-    // ------------------------------------------------------------
-    // SQRT
-    // ------------------------------------------------------------
+    // Sqrt backward
 
     else if (
         tensor->grad_fn->op ==
@@ -608,9 +591,7 @@ void Tensor::backward()
             a->size);
       }
     }
-    // ------------------------------------------------------------
-    // RESHAPE
-    // ------------------------------------------------------------
+    // Reshape backward
 
     else if (tensor->grad_fn->op == OpType::RESHAPE)
     {
@@ -705,6 +686,62 @@ void Tensor::backward()
         cudaFree(d_input_stride);
         cudaFree(d_output_shape);
         cudaFree(d_dims);
+      }
+    }
+
+    else if (tensor->grad_fn->op == OpType::SUM_TO_SHAPE)
+    {
+      Tensor *a = tensor->grad_fn->parents[0];
+
+      if (a && (a->requires_grad || a->grad_fn != nullptr))
+      {
+        const int input_ndim =
+            static_cast<int>(a->shape.size());
+
+        const int output_ndim =
+            static_cast<int>(tensor->shape.size());
+
+        std::vector<int> output_stride(output_ndim);
+
+        int running_stride = 1;
+
+        for (int i = output_ndim - 1; i >= 0; --i)
+        {
+          output_stride[i] = running_stride;
+          running_stride *= tensor->shape[i];
+        }
+
+        int *d_input_shape =
+            copy_int_vector_to_device(a->shape);
+
+        int *d_output_shape =
+            copy_int_vector_to_device(tensor->shape);
+
+        int *d_output_stride =
+            copy_int_vector_to_device(output_stride);
+
+        launch_sum_to_shape_backward(
+            tensor->grad_tensor->d_data,
+            a->grad_tensor->d_data,
+            d_input_shape,
+            d_output_shape,
+            d_output_stride,
+            input_ndim,
+            output_ndim,
+            a->size);
+
+        // Finish the kernel before releasing metadata.
+        cudaError_t err = cudaDeviceSynchronize();
+
+        free_device_int_vector(d_input_shape, a->shape);
+        free_device_int_vector(d_output_shape, tensor->shape);
+        free_device_int_vector(d_output_stride, output_stride);
+
+        if (err != cudaSuccess)
+        {
+          throw std::runtime_error(
+              cudaGetErrorString(err));
+        }
       }
     }
   }

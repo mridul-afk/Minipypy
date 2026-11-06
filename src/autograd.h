@@ -22,7 +22,8 @@ enum class OpType
     BCE_WITH_LOGITS,
     SQRT,
     RESHAPE,
-    PERMUTE
+    PERMUTE,
+    SUM_TO_SHAPE
 };
 
 struct AutogradNode
@@ -94,3 +95,13 @@ void launch_mean_backward(
     const float *grad_out,
     float *grad_in,
     int size);
+
+void launch_sum_to_shape_backward(
+    const float *grad_out,
+    float *grad_in,
+    const int *input_shape,
+    const int *output_shape,
+    const int *output_stride,
+    int input_ndim,
+    int output_ndim,
+    int input_size);

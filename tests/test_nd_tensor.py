@@ -470,3 +470,116 @@ def test_permute_autograd_nonuniform_gradient():
         10.0, 30.0, 50.0,
         20.0, 40.0, 60.0,
     ]
+
+
+def test_sum_axis_backward():
+    x = mini.Tensor(
+        [[1., 2., 3.], [4., 5., 6.]],
+        requires_grad=True
+    )
+
+    y = x.sum(axis=[1])
+    loss = y.sum()
+    loss.backward()
+
+    assert x.grad().cpu() == [1.] * 6
+
+
+def test_sum_axis_nonuniform_backward():
+    x = mini.Tensor(
+        [[1., 2., 3.], [4., 5., 6.]],
+        requires_grad=True
+    )
+
+    weights = mini.Tensor([10., 20.])
+
+    y = x.sum(axis=[1])
+    loss = (y * weights).sum()
+    loss.backward()
+
+    assert x.grad().cpu() == [
+        10., 10., 10.,
+        20., 20., 20.
+    ]
+
+
+def test_sum_multiple_axes_backward():
+    x = mini.Tensor(
+        [float(i) for i in range(24)],
+        [2, 3, 4],
+        requires_grad=True
+    )
+
+    weights = mini.Tensor([1., 2., 3.])
+
+    y = x.sum(axis=[0, 2])
+    loss = (y * weights).sum()
+    loss.backward()
+
+    expected = (
+        [1.] * 4 +
+        [2.] * 4 +
+        [3.] * 4 +
+        [1.] * 4 +
+        [2.] * 4 +
+        [3.] * 4
+    )
+
+    assert x.grad().cpu() == expected
+
+
+def test_mean_axis_0():
+    x = mini.Tensor([[1., 2., 3.], [4., 5., 6.]])
+    y = x.mean(axis=[0])
+
+    assert y.cpu() == [2.5, 3.5, 4.5]
+
+
+def test_mean_axis_1():
+    x = mini.Tensor([[1., 2., 3.], [4., 5., 6.]])
+    y = x.mean(axis=[1])
+
+    assert y.cpu() == [2.0, 5.0]
+
+
+def test_mean_keepdims():
+    x = mini.Tensor([[1., 2., 3.], [4., 5., 6.]])
+    y = x.mean(axis=[1], keepdims=True)
+
+    assert y.shape() == [2, 1]
+    assert y.cpu() == [2.0, 5.0]
+
+
+def test_mean_multiple_axes():
+    x = mini.Tensor([float(i) for i in range(24)], [2, 3, 4])
+    y = x.mean(axis=[0, 2])
+
+    assert y.cpu() == [7.5, 11.5, 15.5]
+
+
+def test_mean_axis_backward():
+    x = mini.Tensor([[1., 2., 3.], [4., 5., 6.]],
+                    requires_grad=True)
+
+    y = x.mean(axis=[1])
+    y.sum().backward()
+
+    assert all(abs(v - 1.0 / 3.0) < 1e-6
+               for v in x.grad().cpu())
+
+
+def test_mean_nonuniform_backward():
+    x = mini.Tensor([[1., 2., 3.], [4., 5., 6.]],
+                    requires_grad=True)
+
+    weights = mini.Tensor([3., 6.])
+    y = x.mean(axis=[1])
+
+    loss = (y * weights).sum()
+    loss.backward()
+
+    assert all(abs(a - b) < 1e-6
+               for a, b in zip(
+                   x.grad().cpu(),
+                   [1., 1., 1., 2., 2., 2.]
+               ))

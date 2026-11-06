@@ -1,4 +1,6 @@
-from typing import Any, Sequence
+
+from typing import Any, Sequence, overload
+
 
 class Tensor:
     def __init__(
@@ -25,8 +27,26 @@ class Tensor:
     def transpose_last_two_dims(self) -> "Tensor": ...
     def permute(self, dims: list[int]) -> "Tensor": ...
 
+    @overload
     def sum(self) -> "Tensor": ...
+
+    @overload
+    def sum(
+        self,
+        axis: list[int],
+        keepdims: bool = False,
+    ) -> "Tensor": ...
+
+    @overload
     def mean(self) -> "Tensor": ...
+
+    @overload
+    def mean(
+        self,
+        axis: list[int],
+        keepdims: bool = False,
+    ) -> "Tensor": ...
+
     def max(self) -> "Tensor": ...
     def sum_to_shape(self, shape: Sequence[int]) -> "Tensor": ...
 
