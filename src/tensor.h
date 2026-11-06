@@ -65,8 +65,10 @@ public:
    Tensor sum_to_shape(std::vector<int> target_shape) const;
    Tensor sum() const;
    Tensor mean() const;
+   Tensor mean(std::vector<int> axes, bool keepdims = false) const;
    Tensor max() const;
    Tensor clone() const;
+   Tensor sum(std::vector<int> axes, bool keepdims = false) const;
 
    // AUTOGRAD
    Tensor grad() const;

@@ -1140,6 +1140,36 @@ Tensor Tensor::mean() const
   return out;
 }
 
+Tensor Tensor::mean(std::vector<int> axes, bool keepdims) const
+{
+  const int ndim = static_cast<int>(shape.size());
+
+  std::vector<bool> reduced(ndim, false);
+  int reduction_size = 1;
+
+  for (int &axis : axes)
+  {
+    if (axis < 0)
+      axis += ndim;
+
+    if (axis < 0 || axis >= ndim)
+      throw std::runtime_error("mean axis out of range");
+
+    if (reduced[axis])
+      throw std::runtime_error("duplicate reduction axis");
+
+    reduced[axis] = true;
+    reduction_size *= shape[axis];
+  }
+
+  if (reduction_size == 0)
+    throw std::runtime_error("mean reduction has zero elements");
+
+  Tensor out = sum(axes, keepdims);
+
+  return out / static_cast<float>(reduction_size);
+}
+
 Tensor Tensor::max() const
 {
   Tensor out(std::vector<int>{1}, requires_grad);
@@ -1295,7 +1325,10 @@ Tensor Tensor::sum_to_shape(std::vector<int> target_shape) const
   if (target_shape.size() > shape.size())
     throw std::runtime_error("sum_to_shape target shape cannot have more dimensions than input shape");
 
-  Tensor out(target_shape, requires_grad);
+  bool needs_grad =
+      requires_grad || grad_fn != nullptr;
+
+  Tensor out(target_shape, needs_grad);
 
   // Important: output must start at zero because kernel uses atomicAdd.
   launch_fill(out.d_data, 0.0f, out.size);
@@ -1326,6 +1359,14 @@ Tensor Tensor::sum_to_shape(std::vector<int> target_shape) const
   free_device_int_vector(d_in_shape, shape);
   free_device_int_vector(d_out_shape, target_shape);
   free_device_int_vector(d_out_stride, out_stride);
+
+  if (needs_grad)
+  {
+    out.grad_fn = std::make_shared<AutogradNode>();
+    out.grad_fn->op = OpType::SUM_TO_SHAPE;
+
+    add_parent_to_node(out.grad_fn, *this);
+  }
 
   return out;
 }
@@ -1810,4 +1851,53 @@ Tensor Tensor::sqrt() const
   }
 
   return out;
+}
+
+Tensor Tensor::sum(std::vector<int> axes, bool keepdims) const
+{
+  const int ndim = static_cast<int>(shape.size());
+
+  std::vector<bool> reduced(ndim, false);
+
+  for (int &axis : axes)
+  {
+    if (axis < 0)
+      axis += ndim;
+
+    if (axis < 0 || axis >= ndim)
+      throw std::runtime_error("sum axis out of range");
+
+    if (reduced[axis])
+      throw std::runtime_error("duplicate reduction axis");
+
+    reduced[axis] = true;
+  }
+
+  std::vector<int> target_shape = shape;
+
+  for (int i = 0; i < ndim; ++i)
+  {
+    if (reduced[i])
+      target_shape[i] = 1;
+  }
+
+  // Existing CUDA reduction implementation.
+  Tensor reduced_tensor = sum_to_shape(target_shape);
+
+  if (keepdims)
+    return reduced_tensor;
+
+  std::vector<int> final_shape;
+
+  for (int i = 0; i < ndim; ++i)
+  {
+    if (!reduced[i])
+      final_shape.push_back(shape[i]);
+  }
+
+  // MiniPyPy currently represents scalar reductions as [1].
+  if (final_shape.empty())
+    final_shape.push_back(1);
+
+  return reduced_tensor.reshape(final_shape);
 }

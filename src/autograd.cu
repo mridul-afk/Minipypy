@@ -642,3 +642,69 @@ void launch_permute_backward(
         ndim,
         total_size);
 }
+
+__global__ void sum_to_shape_backward_kernel(
+    const float *grad_out,
+    float *grad_in,
+    const int *input_shape,
+    const int *output_shape,
+    const int *output_stride,
+    int input_ndim,
+    int output_ndim,
+    int input_size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (idx >= input_size)
+        return;
+
+    int remaining = idx;
+    int output_idx = 0;
+    int offset = input_ndim - output_ndim;
+
+    for (int d = input_ndim - 1; d >= 0; --d)
+    {
+        int coord = remaining % input_shape[d];
+        remaining /= input_shape[d];
+
+        int output_d = d - offset;
+
+        if (output_d < 0)
+            continue;
+
+        int output_coord =
+            output_shape[output_d] == 1 ? 0 : coord;
+
+        output_idx +=
+            output_coord * output_stride[output_d];
+    }
+
+    grad_in[idx] += grad_out[output_idx];
+}
+
+void launch_sum_to_shape_backward(
+    const float *grad_out,
+    float *grad_in,
+    const int *input_shape,
+    const int *output_shape,
+    const int *output_stride,
+    int input_ndim,
+    int output_ndim,
+    int input_size)
+{
+    if (input_size == 0)
+        return;
+
+    constexpr int threads = 256;
+    int blocks = (input_size + threads - 1) / threads;
+
+    sum_to_shape_backward_kernel<<<blocks, threads>>>(
+        grad_out,
+        grad_in,
+        input_shape,
+        output_shape,
+        output_stride,
+        input_ndim,
+        output_ndim,
+        input_size);
+}
